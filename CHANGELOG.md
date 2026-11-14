@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.0 — StreamFlow edition
+
+- Obsidian/StreamFlow design, multiple favourite lists with drag & drop
+- Channel numbers & order, WireGuard VPN with kill switch
+- Recording to internal storage, SD, USB, SMB3 or cloud (end-to-end encrypted)
+- Encrypted database and secrets, sync & backup, PIN lock
+- Phone as remote via QR code, stream diagnosis in the player
+
 ## 0.11.10
 
 - **Fire TV: app row fix, take two.** v0.11.9 replaced the placeholder artwork but the stick still
