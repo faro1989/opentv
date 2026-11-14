@@ -89,6 +89,19 @@ fun ParentalControlsScreen(
         Spacer(Modifier.height(20.dp))
 
         PinSection(pinIsSet = pinIsSet, onSetPin = settings::setPin, onClearPin = settings::clearPin)
+        if (pinIsSet) {
+            val settingsLocked by settings.settingsLocked.collectAsState()
+            androidx.compose.foundation.layout.Row(
+                androidx.compose.ui.Modifier.padding(vertical = 12.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.weight(1f)) {
+                    Text(stringResource(R.string.pingate_toggle), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.pingate_toggle_desc), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = settingsLocked, onCheckedChange = { settings.setSettingsLocked(it); settings.setSettingsUnlocked(true) })
+            }
+        }
 
         Spacer(Modifier.height(16.dp))
 

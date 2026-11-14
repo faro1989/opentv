@@ -8,6 +8,8 @@ package app.opentv.ui.channels
 import android.view.ViewGroup
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,26 +34,27 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.util.UnstableApi
 import app.opentv.R
 import app.opentv.data.model.shownName
+import app.opentv.data.model.shownNumber
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import app.opentv.ui.ChannelsViewModel
+import app.opentv.ui.theme.Obsidian
 import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -90,21 +93,29 @@ fun GuidePreview(
     canGoPrevDay: Boolean = false,
     onPrevDay: () -> Unit = {},
     onNextDay: () -> Unit = {},
+    /** Live measurements of the preview stream, when it plays — fills the Bitrate/Server tiles. */
+    stats: app.opentv.player.StreamDiagnostics.Snapshot? = null,
     modifier: Modifier = Modifier,
 ) {
+    val shape = RoundedCornerShape(18.dp)
     Row(
         modifier
             .fillMaxWidth()
-            .height(212.dp)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .height(250.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .clip(shape)
+            .background(Brush.horizontalGradient(listOf(Obsidian.Surface, Obsidian.Canvas)))
+            .border(1.dp, Obsidian.Hairline, shape)
+            .padding(12.dp),
     ) {
-        // ---- Logo / "watch" card ----------------------------------------------------------
+        // ---- Video card ---------------------------------------------------------------------
         Box(
             Modifier
                 .fillMaxHeight()
                 .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(14.dp))
                 .background(Color.Black)
+                .border(1.dp, Obsidian.CyanGlow, RoundedCornerShape(14.dp))
                 .clickable(onClick = onWatch),
             contentAlignment = Alignment.Center,
         ) {
@@ -113,7 +124,7 @@ fun GuidePreview(
                 AsyncImage(
                     model = row.primary.logoUrl,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize(0.6f),
+                    modifier = Modifier.fillMaxSize(0.5f),
                 )
             }
 
@@ -139,64 +150,107 @@ fun GuidePreview(
                 )
             }
 
+            // Bottom scrim so the badges stay readable over bright pictures.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f)))),
+            )
+            if (row?.now != null) {
+                Text(
+                    stringResource(R.string.ui_live_badge),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(10.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Obsidian.Magenta)
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
+                )
+            }
+            row?.primary?.qualityLabel?.takeIf { it.isNotBlank() }?.let { q ->
+                Text(
+                    q.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Obsidian.Cyan,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .border(1.dp, Obsidian.CyanGlow, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+            }
+            // Cyan "watch" pill — the design's primary action.
             Row(
                 Modifier
                     .align(Alignment.BottomStart)
                     .padding(10.dp)
-                    .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .clip(RoundedCornerShape(50))
+                    .background(Obsidian.Cyan)
+                    .padding(start = 8.dp, end = 14.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(16.dp),
-                )
+                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Obsidian.Canvas, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(stringResource(R.string.guide_watch_label), color = Color.White, style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.guide_watch_label), color = Obsidian.Canvas, style = MaterialTheme.typography.labelLarge)
             }
         }
 
-        Spacer(Modifier.width(18.dp))
+        Spacer(Modifier.width(20.dp))
 
         // ---- Now / next detail ------------------------------------------------------------
         Column(Modifier.weight(1f).fillMaxHeight()) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (row != null) {
+                    // Violet channel chip + number, like "SKY SPORT 1 HD  Kanal 001".
+                    Text(
+                        row.primary.shownName.uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Obsidian.VioletDeep)
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                    row.primary.shownNumber?.let { num ->
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            stringResource(R.string.ui_channel_number, "%03d".format(num)),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Obsidian.TextMid,
+                            maxLines = 1,
+                        )
+                    }
+                }
+                Spacer(Modifier.weight(1f))
                 // ---- Day navigation (Sky Q-style): ‹ Today › ----------------------------
-                // Only shown once the caller wires a label in; keeps older callers unchanged.
                 if (dayLabel.isNotEmpty()) {
                     IconButton(onClick = onPrevDay, enabled = canGoPrevDay) {
                         Icon(
                             Icons.Default.KeyboardArrowLeft,
                             contentDescription = stringResource(R.string.guide_prev_day),
-                            tint = if (canGoPrevDay) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                            tint = if (canGoPrevDay) Obsidian.TextHigh else Obsidian.TextHigh.copy(alpha = 0.3f),
                         )
                     }
-                    Text(
-                        dayLabel,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                    )
+                    Text(dayLabel, style = MaterialTheme.typography.labelLarge, color = Obsidian.Cyan, maxLines = 1)
                     IconButton(onClick = onNextDay) {
-                        Icon(
-                            Icons.Default.KeyboardArrowRight,
-                            contentDescription = stringResource(R.string.guide_next_day),
-                        )
+                        Icon(Icons.Default.KeyboardArrowRight, contentDescription = stringResource(R.string.guide_next_day))
                     }
                 }
-                Spacer(Modifier.weight(1f))
                 if (row != null) {
                     IconButton(onClick = onRecord) {
-                        // Red throughout — the record convention — but the glyph switches to a
-                        // stop square while a recording is running, so a press visibly does
-                        // something (● start → ■ stop) rather than looking inert.
+                        // Magenta — the design's colour for recording — and the glyph switches to a
+                        // stop square while a recording runs, so a press visibly does something.
                         Icon(
                             if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
                             contentDescription = if (isRecording) stringResource(R.string.guide_cd_stop_recording) else stringResource(R.string.guide_cd_record_now),
-                            tint = Color(0xFFE53935),
+                            tint = Obsidian.Magenta,
                         )
                     }
                 }
@@ -212,76 +266,110 @@ fun GuidePreview(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
                     Text(
                         stringResource(R.string.guide_highlight_hint),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Obsidian.TextMid,
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }
                 return@Column
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    row.primary.shownName,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                if (row.variants.size > 1) {
-                    Text(
-                        stringResource(R.string.guide_qualities_count, row.variants.size),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
+            Spacer(Modifier.height(6.dp))
+            val nowProg = row.now
+            Text(
+                nowProg?.title ?: row.primary.shownName,
+                style = MaterialTheme.typography.headlineMedium,
+                color = Obsidian.TextHigh,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(8.dp))
+            if (nowProg != null) {
+                val p = nowProg.progressAt(nowMillis).coerceIn(0f, 1f)
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color.White.copy(alpha = 0.12f)),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(p)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Obsidian.Cyan),
                     )
                 }
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            val nowProg = row.now
-            if (nowProg != null) {
-                Text(
-                    "${formatTime(nowProg.startUtcMillis)}–${formatTime(nowProg.endUtcMillis)}   ${nowProg.title}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
                 Spacer(Modifier.height(6.dp))
-                LinearProgressIndicator(
-                    progress = { nowProg.progressAt(nowMillis) },
-                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                )
-                nowProg.description?.takeIf { it.isNotBlank() }?.let { synopsis ->
-                    Spacer(Modifier.height(8.dp))
+                Row {
                     Text(
-                        synopsis,
+                        "${formatTime(nowProg.startUtcMillis)} – ${formatTime(nowProg.endUtcMillis)}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                        color = Obsidian.TextMid,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        stringResource(R.string.ui_minutes_left, ((nowProg.endUtcMillis - nowMillis) / 60_000L).coerceAtLeast(0L)),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Obsidian.Cyan,
                     )
                 }
             } else {
                 Text(
                     stringResource(R.string.guide_no_info_channel),
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Obsidian.TextMid,
                 )
             }
 
-            row.next?.let { next ->
-                Spacer(Modifier.weight(1f))
-                Text(
-                    stringResource(R.string.guide_next_prefix, formatTime(next.startUtcMillis), next.title),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            Spacer(Modifier.weight(1f))
+            // Three glass info tiles, as in the design — filled with what the guide really knows.
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                InfoTile(
+                    stringResource(R.string.ui_tile_next),
+                    row.next?.let { "${formatTime(it.startUtcMillis)}  ${it.title}" } ?: "–",
+                    Modifier.weight(2f),
+                )
+                // With the preview playing: real Bitrate and Server (the design's tiles). Otherwise
+                // what the catalogue knows: quality label and catch-up.
+                val bitrate = stats?.videoBitrate?.takeIf { it > 0 }
+                InfoTile(
+                    stringResource(if (bitrate != null) R.string.diag_bitrate else R.string.ui_tile_quality),
+                    bitrate?.let { "%.1f Mbit/s".format(it / 1_000_000.0) } ?: row.primary.qualityLabel.ifBlank {
+                        if (row.variants.size > 1) stringResource(R.string.guide_qualities_count, row.variants.size) else "–"
+                    },
+                    Modifier.weight(1f),
+                )
+                val server = stats?.server
+                InfoTile(
+                    stringResource(if (server != null) R.string.diag_server else R.string.ui_tile_catchup),
+                    server ?: if (row.primary.tvArchive) stringResource(R.string.ui_catchup_days, row.primary.tvArchiveDays) else "–",
+                    Modifier.weight(1f),
                 )
             }
         }
+    }
+}
+
+/** A small frosted tile: uppercase caption over a cyan value — the design's BITRATE / SERVER cards. */
+@Composable
+private fun InfoTile(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Obsidian.Elevated.copy(alpha = 0.8f))
+            .border(1.dp, Obsidian.Hairline, RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = Obsidian.TextMid, maxLines = 1)
+        Spacer(Modifier.height(2.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.titleSmall,
+            color = Obsidian.Cyan,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

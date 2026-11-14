@@ -379,6 +379,33 @@ private fun RecordingRow(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            // Where it's saved — box, USB/SD, NAS or the cloud — so nobody has to hunt for a recording.
+            if (recording.status != RecordingStatus.SCHEDULED) {
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                val appSettings = remember { ServiceLocator.get(ctx).settings }
+                val place = RecordingStorage.placeOf(ctx, recording.filePath)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    stringResource(
+                        R.string.rec_saved_in,
+                        stringResource(
+                            when (place) {
+                                RecordingStorage.Place.INTERNAL -> R.string.rec_place_internal
+                                RecordingStorage.Place.USB -> R.string.rec_place_usb
+                                RecordingStorage.Place.NAS -> R.string.rec_place_nas
+                                RecordingStorage.Place.CLOUD -> R.string.rec_place_cloud
+                                RecordingStorage.Place.CLOUD_PENDING -> R.string.rec_place_cloud_label
+                            },
+                        ),
+                        RecordingStorage.describe(ctx, appSettings, recording.filePath),
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (place == RecordingStorage.Place.CLOUD) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (showProfiles && profileName != null) {
                 Spacer(Modifier.height(2.dp))
                 Text(

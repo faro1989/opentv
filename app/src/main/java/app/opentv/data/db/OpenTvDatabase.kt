@@ -5,6 +5,8 @@
  */
 package app.opentv.data.db
 
+import app.opentv.core.SecretStore
+import java.io.File
 import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
@@ -18,6 +20,8 @@ import app.opentv.data.model.Channel
 import app.opentv.data.model.EpgChannelAlias
 import app.opentv.data.model.EpgFeed
 import app.opentv.data.model.Episode
+import app.opentv.data.model.FavouriteList
+import app.opentv.data.model.FavouriteListEntry
 import app.opentv.data.model.LiveStreamFormat
 import app.opentv.data.model.Movie
 import app.opentv.data.model.PlaybackPosition
@@ -70,8 +74,10 @@ class Converters {
         Recording::class,
         SeriesRule::class,
         Reminder::class,
+        FavouriteList::class,
+        FavouriteListEntry::class,
     ],
-    version = 11,
+    version = 13,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -90,6 +96,7 @@ abstract class OpenTvDatabase : RoomDatabase() {
     abstract fun recordings(): RecordingDao
     abstract fun seriesRules(): SeriesRuleDao
     abstract fun reminders(): ReminderDao
+    abstract fun favouriteLists(): FavouriteListDao
 
     companion object {
         /**
@@ -272,14 +279,85 @@ abstract class OpenTvDatabase : RoomDatabase() {
             }
         }
 
-        fun build(context: Context): OpenTvDatabase =
-            Room.databaseBuilder(context, OpenTvDatabase::class.java, "opentv.db")
+        /**
+         * v11 → v12: multiple named favourites lists. Purely additive — two new tables and one
+         * index, matching Room's generated DDL so existing favourites, recordings and overrides
+         * survive the upgrade rather than falling through to the destructive rebuild.
+         */
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `favourite_lists` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`sortIndex` INTEGER NOT NULL, " +
+                        "`createdAtMillis` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `favourite_list_entries` (" +
+                        "`listId` INTEGER NOT NULL, " +
+                        "`sourceId` INTEGER NOT NULL, " +
+                        "`streamId` TEXT NOT NULL, " +
+                        "`sortIndex` INTEGER NOT NULL, " +
+                        "`addedAtMillis` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`listId`, `sourceId`, `streamId`))",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_favourite_list_entries_sourceId_streamId` " +
+                        "ON `favourite_list_entries` (`sourceId`, `streamId`)",
+                )
+            }
+        }
+
+        /** v12 → v13: the user's own channel numbers. Nullable INTEGER, no default — matches `Int?`. */
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `channels` ADD COLUMN `customNumber` INTEGER")
+            }
+        }
+
+        /**
+         * Encrypts an existing plaintext database in place (one-time, on the first start after the
+         * update): opens it with SQLCipher's empty key, `sqlcipher_export`s everything into an
+         * encrypted copy, then swaps the files. Favourites, numbers and recordings all survive.
+         */
+        private fun encryptLegacyDatabase(context: Context, passphrase: String) {
+            val plain = context.getDatabasePath("opentv.db")
+            if (!SecretStore.isPlainSqlite(plain)) return
+            val tmp = File(plain.parentFile, "opentv-encrypted.db")
+            tmp.delete()
+            try {
+                val db = net.zetetic.database.sqlcipher.SQLiteDatabase.openDatabase(
+                    plain.absolutePath, "", null, net.zetetic.database.sqlcipher.SQLiteDatabase.OPEN_READWRITE, null,
+                )
+                db.rawExecSQL("ATTACH DATABASE '${tmp.absolutePath}' AS encrypted KEY '$passphrase'")
+                db.rawExecSQL("SELECT sqlcipher_export('encrypted')")
+                db.rawExecSQL("PRAGMA encrypted.user_version = ${db.version}")
+                db.rawExecSQL("DETACH DATABASE encrypted")
+                db.close()
+                listOf("", "-wal", "-shm", "-journal").forEach { File(plain.path + it).delete() }
+                if (!tmp.renameTo(plain)) error("rename failed")
+            } catch (e: Exception) {
+                // Never strand the user: if the export fails, start fresh (one provider sync away).
+                android.util.Log.e("OpenTvDatabase", "Encrypting the database failed; rebuilding", e)
+                tmp.delete()
+                listOf("", "-wal", "-shm", "-journal").forEach { File(plain.path + it).delete() }
+            }
+        }
+
+        fun build(context: Context): OpenTvDatabase {
+            System.loadLibrary("sqlcipher")
+            val passphrase = SecretStore.databasePassphrase(context)
+            encryptLegacyDatabase(context, passphrase)
+            return Room.databaseBuilder(context, OpenTvDatabase::class.java, "opentv.db")
+                // AES-256 encrypted file; the passphrase lives only Keystore-encrypted (SecretStore).
+                .openHelperFactory(net.zetetic.database.sqlcipher.SupportOpenHelperFactory(passphrase.toByteArray(Charsets.UTF_8)))
                 // WAL keeps guide writes from blocking guide reads, so a background EPG
                 // refresh cannot make the UI stutter on a slow TV box.
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addMigrations(
                     MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
-                    MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+                    MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
                 )
                 /*
                  * Pre-1.0 policy: schema changes drop and rebuild the database. Everything
@@ -290,5 +368,6 @@ abstract class OpenTvDatabase : RoomDatabase() {
                  */
                 .fallbackToDestructiveMigration()
                 .build()
+        }
     }
 }

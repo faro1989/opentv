@@ -91,6 +91,17 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(app.opentv.core.LocaleUtils.wrap(newBase))
     }
 
+    // Phone remote: listen while OpenTV is on screen, stop when it isn't.
+    override fun onStart() {
+        super.onStart()
+        runCatching { app.opentv.pairing.RemoteServer.get(this).start(this) }
+    }
+
+    override fun onStop() {
+        runCatching { app.opentv.pairing.RemoteServer.get(this).stop() }
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -199,6 +210,11 @@ object Routes {
     const val SYNC = "sync"
     const val REC_SETTINGS = "recording-settings"
     const val ABOUT = "about"
+    const val VPN = "vpn"
+    const val STORAGE = "storage"
+    const val CHANNEL_ORDER = "channel-order"
+    const val PHONE_REMOTE = "phone-remote"
+    const val BACKUP = "backup"
     const val SERIES_DETAIL = "series/{seriesId}"
     const val MOVIE_DETAIL = "movie/{movieId}"
     const val EDIT_SOURCE = "edit-source/{sourceId}"
@@ -343,6 +359,9 @@ private fun OpenTvApp(isTelevision: Boolean) {
                     onRefresh = sourcesViewModel::refreshAll,
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
                     onOpenSettings = { navController.navigate(Routes.SETTINGS_HUB) },
+                    onOpenVpn = { navController.navigate(Routes.VPN) },
+                    onOpenChannelOrder = { navController.navigate(Routes.CHANNEL_ORDER) },
+                    onOpenPhoneRemote = { navController.navigate(Routes.PHONE_REMOTE) },
                     onOpenProfiles = { navController.navigate(Routes.PROFILES) },
                     onPlayRecording = { rec ->
                         // A NAS recording plays straight off its smb:// locator and a USB one off
@@ -404,19 +423,59 @@ private fun OpenTvApp(isTelevision: Boolean) {
             }
 
             composable(Routes.SETTINGS_HUB) {
-                SettingsHubScreen(
-                    onOpenProviders = { navController.navigate(Routes.PROVIDERS) },
-                    onOpenAddons = { navController.navigate(Routes.ADDONS) },
-                    onOpenGuide = { navController.navigate(Routes.EPG_SETTINGS) },
-                    onOpenChannels = { navController.navigate(Routes.CHANNELS) },
-                    onOpenWebManager = { navController.navigate(Routes.WEB_MANAGER) },
-                    onOpenDisplay = { navController.navigate(Routes.APP_SETTINGS) },
-                    onOpenParental = { navController.navigate(Routes.PARENTAL) },
-                    onOpenSync = { navController.navigate(Routes.SYNC) },
-                    onOpenRecordings = { navController.navigate(Routes.REC_SETTINGS) },
-                    onOpenAbout = { navController.navigate(Routes.ABOUT) },
-                    onBack = { navController.popBackStack() },
-                )
+                app.opentv.ui.settings.PinGate(onCancel = { navController.popBackStack() }) {
+                    SettingsHubScreen(
+                        onOpenProviders = { navController.navigate(Routes.PROVIDERS) },
+                        onOpenAddons = { navController.navigate(Routes.ADDONS) },
+                        onOpenGuide = { navController.navigate(Routes.EPG_SETTINGS) },
+                        onOpenChannels = { navController.navigate(Routes.CHANNELS) },
+                        onOpenWebManager = { navController.navigate(Routes.WEB_MANAGER) },
+                        onOpenDisplay = { navController.navigate(Routes.APP_SETTINGS) },
+                        onOpenParental = { navController.navigate(Routes.PARENTAL) },
+                        onOpenSync = { navController.navigate(Routes.SYNC) },
+                        onOpenRecordings = { navController.navigate(Routes.REC_SETTINGS) },
+                        onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                        onOpenVpn = { navController.navigate(Routes.VPN) },
+                        onOpenStorage = { navController.navigate(Routes.STORAGE) },
+                        onOpenChannelOrder = { navController.navigate(Routes.CHANNEL_ORDER) },
+                        onOpenPhoneRemote = { navController.navigate(Routes.PHONE_REMOTE) },
+                        onOpenBackup = { navController.navigate(Routes.BACKUP) },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+            }
+
+            composable(Routes.BACKUP) {
+                app.opentv.ui.settings.PinGate(onCancel = { navController.popBackStack() }) {
+                    app.opentv.ui.settings.BackupScreen(onBack = { navController.popBackStack() })
+                }
+            }
+
+            composable(Routes.PHONE_REMOTE) {
+                app.opentv.ui.settings.PinGate(onCancel = { navController.popBackStack() }) {
+                    app.opentv.ui.settings.PhoneRemoteScreen(onBack = { navController.popBackStack() })
+                }
+            }
+
+            composable(Routes.CHANNEL_ORDER) {
+                app.opentv.ui.settings.PinGate(onCancel = { navController.popBackStack() }) {
+                    app.opentv.ui.channels.ChannelOrderScreen(onBack = { navController.popBackStack() })
+                }
+            }
+
+            composable(Routes.STORAGE) {
+                app.opentv.ui.settings.PinGate(onCancel = { navController.popBackStack() }) {
+                    app.opentv.ui.settings.StorageCloudScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenRecordingSettings = { navController.navigate(Routes.REC_SETTINGS) },
+                    )
+                }
+            }
+
+            composable(Routes.VPN) {
+                app.opentv.ui.settings.PinGate(onCancel = { navController.popBackStack() }) {
+                    app.opentv.ui.settings.VpnSettingsScreen(onBack = { navController.popBackStack() })
+                }
             }
 
             composable(Routes.SYNC) {
@@ -424,7 +483,9 @@ private fun OpenTvApp(isTelevision: Boolean) {
             }
 
             composable(Routes.REC_SETTINGS) {
-                RecordingSettingsScreen(onBack = { navController.popBackStack() })
+                app.opentv.ui.settings.PinGate(onCancel = { navController.popBackStack() }) {
+                    RecordingSettingsScreen(onBack = { navController.popBackStack() })
+                }
             }
 
             composable(Routes.CHANNELS) {
@@ -440,12 +501,14 @@ private fun OpenTvApp(isTelevision: Boolean) {
             }
 
             composable(Routes.PROVIDERS) {
-                ProvidersScreen(
-                    viewModel = sourcesViewModel,
-                    onAddSource = { navController.navigate(Routes.ADD_SOURCE) },
-                    onEditSource = { src -> navController.navigate(Routes.editSource(src.id)) },
-                    onBack = { navController.popBackStack() },
-                )
+                app.opentv.ui.settings.PinGate(onCancel = { navController.popBackStack() }) {
+                    ProvidersScreen(
+                        viewModel = sourcesViewModel,
+                        onAddSource = { navController.navigate(Routes.ADD_SOURCE) },
+                        onEditSource = { src -> navController.navigate(Routes.editSource(src.id)) },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
             }
 
             composable(Routes.ADDONS) {

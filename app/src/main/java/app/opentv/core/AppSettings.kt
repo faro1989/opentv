@@ -104,6 +104,16 @@ class AppSettings private constructor(context: Context) {
         _hiddenCategories.value = keys.toSet()
     }
 
+    /** Settings, VPN, storage, channel order and phone remote behind the parental PIN. */
+    private val _settingsLocked = MutableStateFlow(prefs.getBoolean(KEY_SETTINGS_LOCK, false))
+    val settingsLocked: StateFlow<Boolean> = _settingsLocked.asStateFlow()
+    fun setSettingsLocked(v: Boolean) { prefs.edit().putBoolean(KEY_SETTINGS_LOCK, v).apply(); _settingsLocked.value = v }
+
+    /** Session unlock for the settings gate — like [hiddenUnlocked], gone at the next app start. */
+    private val _settingsUnlocked = MutableStateFlow(false)
+    val settingsUnlocked: StateFlow<Boolean> = _settingsUnlocked.asStateFlow()
+    fun setSettingsUnlocked(v: Boolean) { _settingsUnlocked.value = v }
+
     fun setHiddenUnlocked(unlocked: Boolean) {
         _hiddenUnlocked.value = unlocked
     }
@@ -267,7 +277,7 @@ class AppSettings private constructor(context: Context) {
 
     private fun readChannelLayout(): ChannelLayout =
         runCatching { ChannelLayout.valueOf(prefs.getString(KEY_CHANNEL_LAYOUT, null) ?: "") }
-            .getOrDefault(ChannelLayout.GRID)
+            .getOrDefault(ChannelLayout.LIST)
 
     // ---- Recording ---------------------------------------------------------------------------
 
@@ -276,7 +286,7 @@ class AppSettings private constructor(context: Context) {
      * USB / external drive addressed through the Storage Access Framework (a granted tree URI —
      * the only way to write removable storage on modern Android without a raw filesystem path).
      */
-    enum class RecordingTarget { INTERNAL, SMB, USB }
+    enum class RecordingTarget { INTERNAL, SMB, USB, CLOUD }
 
     private val _recordingTarget = MutableStateFlow(readRecordingTarget())
     val recordingTarget: StateFlow<RecordingTarget> = _recordingTarget.asStateFlow()
@@ -317,7 +327,7 @@ class AppSettings private constructor(context: Context) {
     private val _smbUser = MutableStateFlow(prefs.getString(KEY_SMB_USER, "").orEmpty())
     val smbUser: StateFlow<String> = _smbUser.asStateFlow()
 
-    private val _smbPassword = MutableStateFlow(prefs.getString(KEY_SMB_PASS, "").orEmpty())
+    private val _smbPassword = MutableStateFlow(SecretStore.get(prefs, KEY_SMB_PASS))
     val smbPassword: StateFlow<String> = _smbPassword.asStateFlow()
 
     fun setRecordingTarget(target: RecordingTarget) {
@@ -331,13 +341,166 @@ class AppSettings private constructor(context: Context) {
             .putString(KEY_SMB_SHARE, share.trim())
             .putString(KEY_SMB_FOLDER, folder.trim())
             .putString(KEY_SMB_USER, user)
-            .putString(KEY_SMB_PASS, password)
+            .also { SecretStore.put(it, KEY_SMB_PASS, password) }
             .apply()
         _smbHost.value = host.trim()
         _smbShare.value = share.trim()
         _smbFolder.value = folder.trim()
         _smbUser.value = user
         _smbPassword.value = password
+    }
+
+    /**
+     * Online cloud (WebDAV) for recordings — Nextcloud, MagentaCLOUD, pCloud, Koofr, HiDrive, GMX…
+     * A recording is captured to a local staging folder first (so it can be watched while it
+     * records and never depends on the upload link holding up for hours), then uploaded when it
+     * finishes. Credentials live on-device only, like the NAS ones.
+     */
+    private val _cloudProvider = MutableStateFlow(prefs.getString(KEY_CLOUD_PROVIDER, "nextcloud").orEmpty())
+    val cloudProvider: StateFlow<String> = _cloudProvider.asStateFlow()
+
+    private val _cloudUrl = MutableStateFlow(prefs.getString(KEY_CLOUD_URL, "").orEmpty())
+    val cloudUrl: StateFlow<String> = _cloudUrl.asStateFlow()
+
+    private val _cloudUser = MutableStateFlow(prefs.getString(KEY_CLOUD_USER, "").orEmpty())
+    val cloudUser: StateFlow<String> = _cloudUser.asStateFlow()
+
+    private val _cloudPassword = MutableStateFlow(SecretStore.get(prefs, KEY_CLOUD_PASS))
+    val cloudPassword: StateFlow<String> = _cloudPassword.asStateFlow()
+
+    /** Sub-folder in the cloud, created on first upload. */
+    private val _cloudFolder = MutableStateFlow(prefs.getString(KEY_CLOUD_FOLDER, "OpenTV").orEmpty())
+    val cloudFolder: StateFlow<String> = _cloudFolder.asStateFlow()
+
+    /** Keep the local copy after a successful upload (plays instantly, costs box storage). */
+    private val _cloudKeepLocal = MutableStateFlow(prefs.getBoolean(KEY_CLOUD_KEEP_LOCAL, false))
+    val cloudKeepLocal: StateFlow<Boolean> = _cloudKeepLocal.asStateFlow()
+
+    fun setCloudConfig(provider: String, url: String, user: String, password: String, folder: String, keepLocal: Boolean) {
+        prefs.edit()
+            .putString(KEY_CLOUD_PROVIDER, provider)
+            .putString(KEY_CLOUD_URL, url.trim())
+            .putString(KEY_CLOUD_USER, user.trim())
+            .also { SecretStore.put(it, KEY_CLOUD_PASS, password) }
+            .putString(KEY_CLOUD_FOLDER, folder.trim())
+            .putBoolean(KEY_CLOUD_KEEP_LOCAL, keepLocal)
+            .apply()
+        _cloudProvider.value = provider
+        _cloudUrl.value = url.trim()
+        _cloudUser.value = user.trim()
+        _cloudPassword.value = password
+        _cloudFolder.value = folder.trim()
+        _cloudKeepLocal.value = keepLocal
+    }
+
+    // ---- "Kanalnummern & Reihenfolge" -------------------------------------------------------
+
+    /** Show the provider's official numbers (LCN). Mirrored into [NumberingPolicy]. */
+    private val _lcnNumbers = MutableStateFlow(prefs.getBoolean(KEY_LCN, true))
+    val lcnNumbers: StateFlow<Boolean> = _lcnNumbers.asStateFlow()
+
+    /** The user's own numbers override the provider's. Mirrored into [NumberingPolicy]. */
+    private val _forceCustomNumbers = MutableStateFlow(prefs.getBoolean(KEY_FORCE_CUSTOM, true))
+    val forceCustomNumbers: StateFlow<Boolean> = _forceCustomNumbers.asStateFlow()
+
+    /** Renumber 1…n without gaps whenever the order is saved. */
+    private val _closeNumberGaps = MutableStateFlow(prefs.getBoolean(KEY_CLOSE_GAPS, false))
+    val closeNumberGaps: StateFlow<Boolean> = _closeNumberGaps.asStateFlow()
+
+    fun setNumbering(lcn: Boolean, forceCustom: Boolean, closeGaps: Boolean) {
+        prefs.edit().putBoolean(KEY_LCN, lcn).putBoolean(KEY_FORCE_CUSTOM, forceCustom).putBoolean(KEY_CLOSE_GAPS, closeGaps).apply()
+        _lcnNumbers.value = lcn; _forceCustomNumbers.value = forceCustom; _closeNumberGaps.value = closeGaps
+        app.opentv.data.model.NumberingPolicy.lcn = lcn
+        app.opentv.data.model.NumberingPolicy.forceCustom = forceCustom
+    }
+
+    /**
+     * Channels behind the parental PIN, keyed `sourceId:streamId` (stable across re-syncs). Like
+     * hidden adult categories they drop out of the guide, lists and search until the session is
+     * unlocked under Parental controls.
+     */
+    private val _lockedChannels = MutableStateFlow(prefs.getStringSet(KEY_LOCKED, emptySet())?.toSet() ?: emptySet())
+    val lockedChannels: StateFlow<Set<String>> = _lockedChannels.asStateFlow()
+
+    fun setLockedChannels(keys: Set<String>) {
+        prefs.edit().putStringSet(KEY_LOCKED, keys).apply()
+        _lockedChannels.value = keys
+    }
+
+    init {
+        app.opentv.recording.SmbClient.requireEncryption = prefs.getBoolean(KEY_SMB_ENCRYPT, true)
+        app.opentv.data.model.NumberingPolicy.lcn = _lcnNumbers.value
+        app.opentv.data.model.NumberingPolicy.forceCustom = _forceCustomNumbers.value
+    }
+
+    // ---- "Speicher & Cloud": sync rules and housekeeping -----------------------------------
+
+    private fun flag(key: String, default: Boolean) = MutableStateFlow(prefs.getBoolean(key, default))
+    private fun putFlag(key: String, flow: MutableStateFlow<Boolean>, value: Boolean) {
+        prefs.edit().putBoolean(key, value).apply(); flow.value = value
+    }
+
+    /** Uploads and cloud sync wait for Wi-Fi / Ethernet — never burn mobile data. On by default. */
+    private val _syncWifiOnly = flag(KEY_SYNC_WIFI_ONLY, true)
+    val syncWifiOnly: StateFlow<Boolean> = _syncWifiOnly.asStateFlow()
+    fun setSyncWifiOnly(v: Boolean) = putFlag(KEY_SYNC_WIFI_ONLY, _syncWifiOnly, v)
+
+    /** Finished cloud recordings upload on their own. Off = they wait for "sync now". */
+    private val _cloudAutoUpload = flag(KEY_CLOUD_AUTO_UPLOAD, true)
+    val cloudAutoUpload: StateFlow<Boolean> = _cloudAutoUpload.asStateFlow()
+    fun setCloudAutoUpload(v: Boolean) = putFlag(KEY_CLOUD_AUTO_UPLOAD, _cloudAutoUpload, v)
+
+    /** Keep favourites, watch history and cloud recordings in step across devices via the cloud. */
+    private val _cloudLiveSync = flag(KEY_CLOUD_LIVE_SYNC, false)
+    val cloudLiveSync: StateFlow<Boolean> = _cloudLiveSync.asStateFlow()
+    fun setCloudLiveSync(v: Boolean) = putFlag(KEY_CLOUD_LIVE_SYNC, _cloudLiveSync, v)
+
+    /** Delete the oldest local recordings when free space drops under [cleanupThresholdGb]. */
+    private val _autoCleanup = flag(KEY_AUTO_CLEANUP, false)
+    val autoCleanup: StateFlow<Boolean> = _autoCleanup.asStateFlow()
+    fun setAutoCleanup(v: Boolean) = putFlag(KEY_AUTO_CLEANUP, _autoCleanup, v)
+    val cleanupThresholdGb: Int get() = 5
+
+    private val _lastCloudSync = MutableStateFlow(prefs.getLong(KEY_LAST_CLOUD_SYNC, 0L))
+    /** When the last sync finished (0 = never) and whether it went through. */
+    val lastCloudSync: StateFlow<Long> = _lastCloudSync.asStateFlow()
+    private val _lastCloudSyncOk = flag(KEY_LAST_CLOUD_SYNC_OK, true)
+    val lastCloudSyncOk: StateFlow<Boolean> = _lastCloudSyncOk.asStateFlow()
+    fun markCloudSync(ok: Boolean) {
+        val now = System.currentTimeMillis()
+        prefs.edit().putLong(KEY_LAST_CLOUD_SYNC, now).putBoolean(KEY_LAST_CLOUD_SYNC_OK, ok).apply()
+        _lastCloudSync.value = now
+        _lastCloudSyncOk.value = ok
+    }
+
+    /**
+     * End-to-end encryption of everything uploaded to the cloud, with a password only the user
+     * knows (kept Keystore-encrypted here). Same password on every device = same data.
+     */
+    private val _cloudE2E = MutableStateFlow(prefs.getBoolean(KEY_CLOUD_E2E, false))
+    val cloudE2E: StateFlow<Boolean> = _cloudE2E.asStateFlow()
+    private val _cloudE2EPassword = MutableStateFlow(SecretStore.get(prefs, KEY_CLOUD_E2E_PASS))
+    val cloudE2EPassword: StateFlow<String> = _cloudE2EPassword.asStateFlow()
+
+    fun setCloudE2E(enabled: Boolean, password: String) {
+        prefs.edit().putBoolean(KEY_CLOUD_E2E, enabled).also { SecretStore.put(it, KEY_CLOUD_E2E_PASS, password) }.apply()
+        _cloudE2E.value = enabled
+        _cloudE2EPassword.value = password
+    }
+
+    /** Enforce SMB3 encryption + signing to the NAS (mirrored into SmbClient). */
+    private val _smbEncrypt = MutableStateFlow(prefs.getBoolean(KEY_SMB_ENCRYPT, true))
+    val smbEncrypt: StateFlow<Boolean> = _smbEncrypt.asStateFlow()
+    fun setSmbEncrypt(v: Boolean) {
+        prefs.edit().putBoolean(KEY_SMB_ENCRYPT, v).apply(); _smbEncrypt.value = v
+        app.opentv.recording.SmbClient.requireEncryption = v
+    }
+
+    val cloudConfigured: Boolean get() = cloudUrl.value.isNotBlank() && cloudUser.value.isNotBlank()
+
+    fun disconnectCloud() {
+        setCloudConfig(cloudProvider.value, "", "", "", cloudFolder.value, cloudKeepLocal.value)
+        if (recordingTarget.value == RecordingTarget.CLOUD) setRecordingTarget(RecordingTarget.INTERNAL)
     }
 
     private fun readRecordingTarget(): RecordingTarget =
@@ -427,6 +590,7 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_PREVIEW_VIDEO = "guide_preview_video"
         private const val KEY_PREVIEW_SOUND = "guide_preview_sound"
         private const val KEY_PIN_HASH = "parental_pin_hash"
+        private const val KEY_SETTINGS_LOCK = "settings_pin_lock"
         private const val KEY_HIDDEN_CATS = "hidden_categories"
         private const val KEY_ACTIVE_PROFILE = "active_profile_id"
         private const val KEY_RESUME_LAST = "resume_last_channel"
@@ -450,6 +614,25 @@ class AppSettings private constructor(context: Context) {
         private const val KEY_SMB_FOLDER = "smb_folder"
         private const val KEY_SMB_USER = "smb_user"
         private const val KEY_SMB_PASS = "smb_password"
+        private const val KEY_CLOUD_PROVIDER = "cloud_provider"
+        private const val KEY_LCN = "numbering_lcn"
+        private const val KEY_CLOUD_E2E = "cloud_e2e"
+        private const val KEY_SMB_ENCRYPT = "smb_encrypt"
+        private const val KEY_CLOUD_E2E_PASS = "cloud_e2e_password"
+        private const val KEY_FORCE_CUSTOM = "numbering_force_custom"
+        private const val KEY_CLOSE_GAPS = "numbering_close_gaps"
+        private const val KEY_LOCKED = "locked_channels"
+        private const val KEY_SYNC_WIFI_ONLY = "sync_wifi_only"
+        private const val KEY_CLOUD_AUTO_UPLOAD = "cloud_auto_upload"
+        private const val KEY_CLOUD_LIVE_SYNC = "cloud_live_sync"
+        private const val KEY_AUTO_CLEANUP = "auto_cleanup"
+        private const val KEY_LAST_CLOUD_SYNC = "last_cloud_sync"
+        private const val KEY_LAST_CLOUD_SYNC_OK = "last_cloud_sync_ok"
+        private const val KEY_CLOUD_URL = "cloud_url"
+        private const val KEY_CLOUD_USER = "cloud_user"
+        private const val KEY_CLOUD_PASS = "cloud_password"
+        private const val KEY_CLOUD_FOLDER = "cloud_folder"
+        private const val KEY_CLOUD_KEEP_LOCAL = "cloud_keep_local"
         private const val KEY_USB_TREE = "usb_tree_uri"
         private const val KEY_USB_LABEL = "usb_folder_label"
         private const val KEY_SYNC_DEVICE_ID = "sync_device_id"

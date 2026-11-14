@@ -13,35 +13,57 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
+import app.opentv.R
 import androidx.compose.ui.unit.sp
 
 /**
- * A deliberately dark, low-chroma palette.
- *
- * This is a living-room app: it is looked at in a dark room, from three metres away, often
- * for hours. Bright surfaces and saturated accents that read well on a phone in daylight are
- * actively unpleasant on a 55" panel at night, so everything here is anchored near-black with
- * a single restrained accent used only for focus and selection.
+ * "Obsidian Stream" — the StreamFlow-style look: a deep obsidian canvas, glassy charcoal cards,
+ * electric cyan for focus/live progress, vivid violet for category tags and neon magenta kept
+ * strictly for LIVE / recording badges. Still near-black overall, so it stays easy on the eyes
+ * in a dark living room; the saturated colours only ever appear as small accents.
  */
-private val Accent = Color(0xFF7C93FF)
-private val AccentDim = Color(0xFF4B5DB8)
+object Obsidian {
+    val Canvas = Color(0xFF0B0F14)
+    val Surface = Color(0xFF141A23)
+    val Elevated = Color(0xFF1E2633)
+    val Cyan = Color(0xFF00F2FE)
+    val CyanTint = Color(0x1F00F2FE) // 12 % cyan — active chips, selected rows
+    val CyanGlow = Color(0x5900F2FE) // 35 % cyan — the "neon" ring around focused cards
+    val Violet = Color(0xFF7928CA)
+    val VioletDeep = Color(0xFF6807BA)
+    val Magenta = Color(0xFFFF007A)
+    val TextHigh = Color(0xFFF2F4F8)
+    val TextMid = Color(0xFF94A3B8)
+    val TextLow = Color(0xFF64748B)
+    val Hairline = Color(0x14FFFFFF) // 8 % white — the 1px borders on cards
+}
 
 private val DarkScheme = darkColorScheme(
-    primary = Accent,
-    onPrimary = Color(0xFF0A0C14),
-    primaryContainer = AccentDim,
-    onPrimaryContainer = Color(0xFFE6EAFF),
-    secondary = Color(0xFF9AA3C0),
-    background = Color(0xFF07080C),
-    onBackground = Color(0xFFE8EAF0),
-    surface = Color(0xFF0D0F16),
-    onSurface = Color(0xFFE8EAF0),
-    surfaceVariant = Color(0xFF171A24),
-    onSurfaceVariant = Color(0xFFA8AEC0),
-    outline = Color(0xFF2A2F3D),
-    error = Color(0xFFFF6B6B),
-    onError = Color(0xFF1A0505),
+    primary = Obsidian.Cyan,
+    onPrimary = Obsidian.Canvas,
+    primaryContainer = Color(0xFF0E3A40),
+    onPrimaryContainer = Color(0xFFE0FDFF),
+    secondary = Obsidian.Violet,
+    onSecondary = Color.White,
+    secondaryContainer = Obsidian.VioletDeep,
+    onSecondaryContainer = Color(0xFFEFDBFF),
+    tertiary = Obsidian.Magenta,
+    onTertiary = Color.White,
+    background = Obsidian.Canvas,
+    onBackground = Obsidian.TextHigh,
+    surface = Obsidian.Surface,
+    onSurface = Obsidian.TextHigh,
+    surfaceVariant = Obsidian.Elevated,
+    onSurfaceVariant = Obsidian.TextMid,
+    outline = Color(0xFF2A3445),
+    outlineVariant = Obsidian.Hairline,
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
 )
 
 /**
@@ -61,16 +83,41 @@ private val LightScheme = lightColorScheme(
     outline = Color(0xFFD3D7E2),
 )
 
-/** Scaled up from the Material defaults: ten-foot viewing needs bigger text than a phone. */
+/**
+ * Headlines in Plus Jakarta Sans, everything else in Inter — the design's two families. Both ship
+ * as variable fonts (fetched into res/font by scripts/fetch-fonts.sh / CI), so each weight below
+ * pins the variable axis explicitly. Sizes stay scaled up for ten-foot viewing.
+ */
+@OptIn(ExperimentalTextApi::class)
+private fun variable(res: Int, weight: Int) =
+    Font(res, FontWeight(weight), variationSettings = FontVariation.Settings(FontVariation.weight(weight)))
+
+private val Jakarta = FontFamily(
+    variable(R.font.plus_jakarta_sans, 600),
+    variable(R.font.plus_jakarta_sans, 700),
+    variable(R.font.plus_jakarta_sans, 800),
+)
+
+private val Inter = FontFamily(
+    variable(R.font.inter, 400),
+    variable(R.font.inter, 500),
+    variable(R.font.inter, 600),
+    variable(R.font.inter, 700),
+)
+
 private val OpenTvTypography = Typography(
-    displaySmall = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.SemiBold),
-    headlineMedium = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.SemiBold),
-    headlineSmall = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
-    titleLarge = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Medium),
-    titleMedium = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Medium),
-    bodyLarge = TextStyle(fontSize = 16.sp),
-    bodyMedium = TextStyle(fontSize = 14.sp),
-    labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+    displaySmall = TextStyle(fontFamily = Jakarta, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp),
+    headlineMedium = TextStyle(fontFamily = Jakarta, fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp),
+    headlineSmall = TextStyle(fontFamily = Jakarta, fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp),
+    titleLarge = TextStyle(fontFamily = Jakarta, fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
+    titleMedium = TextStyle(fontFamily = Jakarta, fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+    titleSmall = TextStyle(fontFamily = Inter, fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+    bodyLarge = TextStyle(fontFamily = Inter, fontSize = 16.sp),
+    bodyMedium = TextStyle(fontFamily = Inter, fontSize = 14.sp),
+    bodySmall = TextStyle(fontFamily = Inter, fontSize = 12.sp),
+    labelLarge = TextStyle(fontFamily = Inter, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+    labelMedium = TextStyle(fontFamily = Inter, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.3.sp),
+    labelSmall = TextStyle(fontFamily = Inter, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
 )
 
 @Composable

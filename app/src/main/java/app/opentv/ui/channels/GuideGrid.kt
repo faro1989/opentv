@@ -10,6 +10,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -56,7 +65,9 @@ import app.opentv.R
 import app.opentv.data.model.Channel
 import app.opentv.data.model.Programme
 import app.opentv.data.model.shownName
+import app.opentv.data.model.shownNumber
 import app.opentv.ui.ChannelsViewModel
+import app.opentv.ui.theme.Obsidian
 import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -139,10 +150,28 @@ fun ChannelList(
     onFocusRow: (ChannelsViewModel.Row) -> Unit,
     onToggleFavourite: (ChannelsViewModel.Row) -> Unit = {},
     onExitLeftFromChannel: () -> Boolean = { false },
+    // Drag & drop reordering — only offered while browsing one of the user's own lists.
+    canReorder: Boolean = false,
+    movingKey: Any? = null,
+    onStartMove: (ChannelsViewModel.Row) -> Unit = {},
+    onMoveStep: (ChannelsViewModel.Row, Int) -> Unit = { _, _ -> },
+    onEndMove: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val now = System.currentTimeMillis()
+    val listState = rememberLazyListState()
+    // Keep the card being dragged on screen as it travels up or down the list.
+    LaunchedEffect(rows, movingKey) {
+        val index = rows.indexOfFirst { it.key == movingKey }
+        if (index >= 0) {
+            val visible = listState.layoutInfo.visibleItemsInfo
+            val first = visible.firstOrNull()?.index ?: 0
+            val last = visible.lastOrNull()?.index ?: 0
+            if (index <= first || index >= last) listState.animateScrollToItem((index - 1).coerceAtLeast(0))
+        }
+    }
     LazyColumn(
+        state = listState,
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -156,11 +185,22 @@ fun ChannelList(
                 onFocus = { onFocusRow(row) },
                 onToggleFavourite = { onToggleFavourite(row) },
                 onExitLeft = onExitLeftFromChannel,
+                canReorder = canReorder,
+                moving = canReorder && row.key == movingKey,
+                onStartMove = { onStartMove(row) },
+                onMoveStep = { delta -> onMoveStep(row, delta) },
+                onEndMove = onEndMove,
+                modifier = Modifier.animateItem(),
             )
         }
     }
 }
 
+/**
+ * One channel as a StreamFlow-style card: number, logo tile, name with a quality badge, the live
+ * programme, "Folgt …", a percentage and a hairline cyan progress bar. The focused card gets the
+ * neon treatment — cyan ring, soft glow, cyan accent edge on the left and a cyan channel number.
+ */
 @Composable
 private fun ChannelListRow(
     row: ChannelsViewModel.Row,
@@ -170,114 +210,249 @@ private fun ChannelListRow(
     onFocus: () -> Unit,
     onToggleFavourite: () -> Unit,
     onExitLeft: () -> Boolean,
+    canReorder: Boolean = false,
+    moving: Boolean = false,
+    onStartMove: () -> Unit = {},
+    onMoveStep: (Int) -> Unit = {},
+    onEndMove: () -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
-    Row(
-        Modifier
+    val active = focused || isSelected || moving
+    val shape = RoundedCornerShape(14.dp)
+    // Touch drag: one step per card-height of finger travel.
+    val stepPx = with(LocalDensity.current) { 96.dp.toPx() }
+    var dragAccum by remember { mutableFloatStateOf(0f) }
+    val nowProg = row.now
+    val progress = nowProg?.progressAt(nowMillis)?.coerceIn(0f, 1f)
+
+    Box(
+        modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surface,
-            )
+            .padding(vertical = 3.dp)
+            .then(if (moving) Modifier.scale(1.02f) else Modifier)
             .then(
-                if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                else Modifier,
+                if (focused || moving) {
+                    val glow = if (moving) Obsidian.Violet else Obsidian.Cyan
+                    Modifier.shadow(if (moving) 26.dp else 18.dp, shape, ambientColor = glow, spotColor = glow)
+                } else Modifier,
             )
-            // LEFT from a row reopens the collapsed rail, exactly like the grid's channel column.
+            .clip(shape)
+            .background(if (active) Obsidian.Elevated else Obsidian.Surface)
+            .border(
+                width = if (focused || moving) 2.dp else 1.dp,
+                color = when {
+                    moving -> Obsidian.Violet
+                    focused -> Obsidian.Cyan
+                    isSelected -> Obsidian.CyanGlow
+                    else -> Obsidian.Hairline
+                },
+                shape = shape,
+            )
             .onPreviewKeyEvent { e ->
-                if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft) onExitLeft() else false
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent moving
+                when {
+                    // Picked up: the remote's up/down carries the card, OK or Back puts it down.
+                    moving -> {
+                        when (e.key) {
+                            Key.DirectionUp -> onMoveStep(-1)
+                            Key.DirectionDown -> onMoveStep(1)
+                            Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Back, Key.Escape -> onEndMove()
+                            else -> Unit
+                        }
+                        true
+                    }
+                    // LEFT from a row reopens the collapsed rail, exactly like the grid's channel column.
+                    e.key == Key.DirectionLeft -> onExitLeft()
+                    else -> false
+                }
             }
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused) onFocus()
             }
-            .clickable(onClick = onSelect)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clickable(onClick = onSelect),
     ) {
-        row.primary.number?.let { num ->
-            Text(
-                "$num",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                modifier = Modifier.width(30.dp),
+        // The cyan accent edge on the active card.
+        if (active) {
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .width(4.dp)
+                    .height(64.dp)
+                    .background(Obsidian.Cyan, RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp)),
             )
         }
-        AsyncImage(
-            model = row.primary.logoUrl,
-            contentDescription = null,
-            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)),
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    row.primary.shownName,
-                    style = MaterialTheme.typography.titleMedium,
+                    row.primary.shownNumber?.let { "%03d".format(it) } ?: "",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (active) Obsidian.Cyan else Obsidian.TextMid,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.width(44.dp),
                 )
-                if (row.variants.size > 1) {
-                    Spacer(Modifier.width(8.dp))
+                // Logo tile — the channel's initials stand in when the provider has no logo.
+                Box(
+                    Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Obsidian.Canvas)
+                        .border(1.dp, Obsidian.Hairline, RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
-                        stringResource(R.string.guide_qualities_count, row.variants.size),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
+                        initials(row.primary.shownName),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = if (active) Obsidian.Cyan else Obsidian.TextHigh,
+                    )
+                    AsyncImage(
+                        model = row.primary.logoUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().padding(6.dp),
                     )
                 }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            row.primary.shownName,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Obsidian.TextHigh,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        val badge = row.primary.qualityLabel.takeIf { it.isNotBlank() }
+                            ?: if (row.variants.size > 1) stringResource(R.string.guide_qualities_count, row.variants.size) else null
+                        badge?.let {
+                            Spacer(Modifier.width(8.dp))
+                            CardBadge(it.uppercase(), Obsidian.Cyan, Obsidian.CyanTint)
+                        }
+                        if (nowProg != null) {
+                            Spacer(Modifier.width(6.dp))
+                            CardBadge(stringResource(R.string.ui_live_badge), Color.White, Obsidian.Magenta.copy(alpha = 0.85f))
+                        }
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    if (moving) {
+                        Text(
+                            stringResource(R.string.favlist_moving_hint),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Obsidian.Violet,
+                            maxLines = 1,
+                        )
+                    }
+                    Text(
+                        nowProg?.title ?: stringResource(R.string.guide_no_info),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (active) Obsidian.TextHigh else Obsidian.TextMid,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    row.next?.let { next ->
+                        Text(
+                            stringResource(R.string.ui_next_short, clockFormat.format(Date(next.startUtcMillis)), next.title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Obsidian.TextLow,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (canReorder) {
+                    // Drag handle: long-press and drag on touch screens; a tap picks the card up for
+                    // the remote. Moving shows a violet "↕" so it's obvious the card is in hand.
+                    Box(
+                        Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (moving) Obsidian.Violet.copy(alpha = 0.25f) else Color.Transparent)
+                            .pointerInput(Unit) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { dragAccum = 0f; onStartMove() },
+                                    onDragEnd = { onEndMove() },
+                                    onDragCancel = { onEndMove() },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        dragAccum += amount.y
+                                        if (dragAccum > stepPx) { onMoveStep(1); dragAccum -= stepPx }
+                                        if (dragAccum < -stepPx) { onMoveStep(-1); dragAccum += stepPx }
+                                    },
+                                )
+                            }
+                            .clickable { if (moving) onEndMove() else onStartMove() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.DragIndicator,
+                            contentDescription = stringResource(R.string.favlist_drag),
+                            tint = if (moving) Obsidian.Violet else Obsidian.TextLow,
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    IconButton(onClick = onToggleFavourite, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            imageVector = if (row.primary.favourite) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                            contentDescription = if (row.primary.favourite) stringResource(R.string.common_remove_favourite)
+                            else stringResource(R.string.common_favourite),
+                            tint = if (row.primary.favourite) Obsidian.Cyan else Obsidian.TextLow,
+                        )
+                    }
+                    if (progress != null) {
+                        Text(
+                            "${(progress * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (active) Obsidian.Cyan else Obsidian.TextMid,
+                        )
+                    }
+                }
             }
-            Spacer(Modifier.height(2.dp))
-            val nowProg = row.now
-            Text(
-                text = nowProg?.let { "${clockFormat.format(Date(it.startUtcMillis))}  ${it.title}" }
-                    ?: stringResource(R.string.guide_no_info),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (nowProg != null) {
-                Spacer(Modifier.height(6.dp))
+            if (progress != null) {
+                Spacer(Modifier.height(10.dp))
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(3.dp)
+                        .height(4.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                        .background(Color.White.copy(alpha = 0.08f)),
                 ) {
                     Box(
                         Modifier
-                            .fillMaxWidth(nowProg.progressAt(nowMillis).coerceIn(0f, 1f))
-                            .height(3.dp)
-                            .background(MaterialTheme.colorScheme.primary),
+                            .fillMaxWidth(progress)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(if (active) Obsidian.Cyan else Obsidian.TextLow),
                     )
                 }
             }
-            row.next?.let { next ->
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    stringResource(R.string.guide_next_prefix, clockFormat.format(Date(next.startUtcMillis)), next.title),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        IconButton(onClick = onToggleFavourite, modifier = Modifier.size(40.dp)) {
-            Icon(
-                imageVector = if (row.primary.favourite) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                contentDescription = if (row.primary.favourite) stringResource(R.string.common_remove_favourite)
-                else stringResource(R.string.common_favourite),
-                tint = if (row.primary.favourite) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
+}
+
+/** A tiny uppercase pill — FHD, 4K, LIVE … — in the design's label-sm style. */
+@Composable
+internal fun CardBadge(text: String, fg: Color, bg: Color) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = fg,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(bg)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
+}
+
+/** "Sky Sport News" → "SSN", "ZDF HD" → "ZDF": the stand-in shown until (or instead of) a logo. */
+internal fun initials(name: String): String {
+    val words = name.split(' ', '-', '|').filter { it.isNotBlank() && !it.equals("HD", true) && !it.equals("FHD", true) }
+    if (words.isEmpty()) return "TV"
+    return if (words.size == 1) words[0].take(4).uppercase()
+    else words.take(3).joinToString("") { it.first().uppercase() }
 }
 
 @Composable
@@ -357,7 +532,7 @@ private fun GuideRow(
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            row.primary.number?.let { num ->
+            row.primary.shownNumber?.let { num ->
                 Text(
                     "$num",
                     style = MaterialTheme.typography.labelMedium,

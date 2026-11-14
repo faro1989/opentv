@@ -12,6 +12,8 @@ import app.opentv.core.ServiceLocator
 import app.opentv.data.model.Category
 import app.opentv.data.model.Channel
 import app.opentv.data.model.EpgFeed
+import app.opentv.data.model.FavouriteList
+import app.opentv.data.model.FavouriteListEntry
 import app.opentv.data.model.LiveStreamFormat
 import app.opentv.data.model.Movie
 import app.opentv.data.model.PlaybackPosition
@@ -216,6 +218,19 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
     /** null = All. Exposed so the sidebar can highlight the active entry. */
     val selectedCategory = MutableStateFlow<String?>(null)
     val favouritesOnly = MutableStateFlow(false)
+    /** The user-made favourites list being browsed, or null. Mutually exclusive with the above. */
+    val selectedList = MutableStateFlow<Long?>(null)
+    /** The card currently "picked up" for drag & drop reordering, or null. */
+    val movingKey = MutableStateFlow<Any?>(null)
+    /** Set while a reorder write is in flight; cleared when the reordered list arrives, so fast
+     *  repeated presses never compute a move from a stale order. */
+    @Volatile private var reorderPending = false
+    private val listDao get() = graph.database.favouriteLists()
+
+    /** Every user-made favourites list, in the user's order — shown in the rail under Favourites. */
+    val favouriteLists: StateFlow<List<FavouriteList>> =
+        graph.database.favouriteLists().observeLists()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     /** Provider filter for the live guide. null = every source. Only surfaced when there's >1 source. */
     val selectedSource = MutableStateFlow<Long?>(null)
     private val query = MutableStateFlow("")
@@ -373,9 +388,14 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             RowsKey(ids, favs, q, hidden)
         }
             .combine(selectedSource) { key, source -> key to source }
-            .flatMapLatest { (key, source) ->
+            .combine(selectedList) { keyAndSource, list -> Triple(keyAndSource.first, keyAndSource.second, list) }
+            // Re-filter when channels are locked/unlocked or the parental session opens.
+            .combine(settings.lockedChannels) { t, _ -> t }
+            .combine(settings.hiddenUnlocked) { t, _ -> t }
+            .flatMapLatest { (key, source, list) ->
                 val channelFlow = when {
                     key.query.isNotBlank() -> graph.catalogRepository.searchChannels(key.query)
+                    list != null -> listDao.observeChannels(list)
                     key.favs -> graph.catalogRepository.observeFavouriteChannels()
                     key.categoryIds != null -> graph.catalogRepository.observeChannelsIn(key.categoryIds)
                     else -> graph.catalogRepository.observeChannels(source)
@@ -395,9 +415,14 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
                     val scoped = if (source == null) channels else channels.filter { it.sourceId == source }
                     // Adult/hidden channels drop out everywhere they could otherwise leak —
                     // All, search and favourites — until the session is unlocked.
-                    val visible =
+                    val byCategory =
                         if (key.hiddenIds.isEmpty()) scoped
                         else scoped.filter { it.categoryId !in key.hiddenIds }
+                    // Channels locked one by one ("Kanalnummern & Reihenfolge") stay out the same way.
+                    val locked = if (settings.hiddenUnlocked.value) emptySet() else settings.lockedChannels.value
+                    val visible =
+                        if (locked.isEmpty()) byCategory
+                        else byCategory.filter { "${it.sourceId}:${it.streamId}" !in locked }
                     // Show the size-aware loading bar for the FIRST guide build only (start-up).
                     // After that the guide is built and flicking between categories is cheap, so
                     // don't flash a loading line on every tap — that bar was only ever meant for
@@ -413,7 +438,10 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             .flowOn(Dispatchers.Default)
             // Once the first guide is on screen, clear the start-up bar — and never show it for a
             // plain category switch again.
-            .onEach { if (!guideBuilt) { guideBuilt = true; StatusBus.set(null) } }
+            .onEach {
+                reorderPending = false
+                if (!guideBuilt) { guideBuilt = true; StatusBus.set(null) }
+            }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private fun buildRows(
@@ -496,13 +524,150 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun selectCategory(id: String?) {
+        movingKey.value = null
         favouritesOnly.value = false
+        selectedList.value = null
         selectedCategory.value = id
     }
 
     fun selectFavourites() {
+        movingKey.value = null
         favouritesOnly.value = true
+        selectedList.value = null
         selectedCategory.value = null
+    }
+
+    // ---- Multiple favourites lists -------------------------------------------------------------
+
+    fun selectList(id: Long) {
+        movingKey.value = null
+        favouritesOnly.value = false
+        selectedCategory.value = null
+        selectedList.value = id
+    }
+
+    /** Creates a list and, when [row] is given, puts that channel straight into it. */
+    fun createList(name: String, row: Row? = null) {
+        val clean = name.trim().ifEmpty { return }
+        viewModelScope.launch {
+            val id = listDao.insertList(
+                FavouriteList(name = clean, sortIndex = listDao.nextListIndex(), createdAtMillis = System.currentTimeMillis()),
+            )
+            if (row != null) addToList(id, row)
+        }
+    }
+
+    fun renameList(id: Long, name: String) {
+        val clean = name.trim().ifEmpty { return }
+        viewModelScope.launch { listDao.rename(id, clean) }
+    }
+
+    fun deleteList(id: Long) {
+        if (selectedList.value == id) selectFavourites()
+        viewModelScope.launch { listDao.deleteList(id) }
+    }
+
+    /** Adding the row adds the logical channel: every quality variant follows, like the main star. */
+    suspend fun addToList(listId: Long, row: Row) {
+        val index = listDao.nextEntryIndex(listId)
+        row.variants.forEach {
+            listDao.addEntry(
+                FavouriteListEntry(listId, it.sourceId, it.streamId, index, System.currentTimeMillis()),
+            )
+        }
+    }
+
+    suspend fun removeFromList(listId: Long, row: Row) {
+        row.variants.forEach { listDao.removeEntry(listId, it.sourceId, it.streamId) }
+    }
+
+    /** The ids of every list the row's channel is in, for the checkmarks in the "add to list" dialog. */
+    suspend fun listsContaining(row: Row): Set<Long> =
+        listDao.listsContaining(row.primary.sourceId, row.primary.streamId).toSet()
+
+    fun toggleInList(listId: Long, row: Row, isIn: Boolean) {
+        viewModelScope.launch { if (isIn) removeFromList(listId, row) else addToList(listId, row) }
+    }
+
+    /**
+     * Moves [row] one place up ([delta] = -1) or down (+1) in the list being browsed, then rewrites
+     * the whole list's order so the indices stay dense and the move is exactly one step.
+     */
+    fun moveInList(row: Row, delta: Int) {
+        val listId = selectedList.value ?: return
+        if (reorderPending) return
+        val current = rows.value
+        val from = current.indexOfFirst { it.key == row.key }
+        val to = from + delta
+        if (from < 0 || to !in current.indices) return
+        val reordered = current.toMutableList().apply { add(to, removeAt(from)) }
+        reorderPending = true
+        viewModelScope.launch {
+            reordered.forEachIndexed { index, r ->
+                r.variants.forEach { listDao.setEntryIndex(listId, it.sourceId, it.streamId, index) }
+            }
+            // Safety net: if the list somehow doesn't re-emit, don't leave moving locked.
+            kotlinx.coroutines.delay(1_000)
+            reorderPending = false
+        }
+    }
+
+    /** Drag & drop: pick a card up (OK on "Move", or a long-press on its handle)… */
+    fun startMove(row: Row) {
+        if (selectedList.value != null) movingKey.value = row.key
+    }
+
+    /** …and put it down again. The order was saved step by step while it moved. */
+    fun endMove() { movingKey.value = null }
+
+    // ---- Channel numbers ("Kanalnummer zuweisen") -------------------------------------------
+
+    private val channelDao get() = graph.database.channels()
+
+    /** Same logical channel? Quality variants share a groupKey (or are literally the same row). */
+    private fun sameChannel(a: Channel, b: Channel): Boolean =
+        a.id == b.id || (a.groupKey.isNotEmpty() && a.groupKey == b.groupKey)
+
+    /** Who already answers to [number] — another channel than [row], or null when it's free. */
+    suspend fun numberOccupant(row: Row, number: Int): Channel? =
+        channelDao.byShownNumber(number).firstOrNull { other -> row.variants.none { sameChannel(it, other) } }
+
+    /** The lowest unused number at or above [from] — the keypad's "Freie #…" suggestion. */
+    suspend fun nextFreeNumber(from: Int = 1): Int {
+        val used = channelDao.usedNumbers().toHashSet()
+        var n = from.coerceAtLeast(1)
+        while (n in used) n++
+        return n
+    }
+
+    /**
+     * Gives [row] the number [number]. With [swapOnConflict] the channel that held it moves to this
+     * channel's old number (or the next free one). With [syncOrder] the guide, "All channels" and
+     * the favourites follow the new numbering, because their order is the channel's sortIndex.
+     */
+    fun assignNumber(row: Row, number: Int, swapOnConflict: Boolean, syncOrder: Boolean) {
+        viewModelScope.launch {
+            val oldNumber = row.primary.customNumber ?: row.primary.number
+            val occupant = numberOccupant(row, number)
+            if (occupant != null && swapOnConflict) {
+                val target = oldNumber?.takeIf { it != number } ?: nextFreeNumber(number + 1)
+                channelDao.byShownNumber(number)
+                    .filter { sameChannel(it, occupant) }
+                    .forEach {
+                        channelDao.setCustomNumber(it.id, target)
+                        if (syncOrder) channelDao.setSortIndex(it.id, target)
+                    }
+            }
+            row.variants.forEach {
+                channelDao.setCustomNumber(it.id, number)
+                if (syncOrder) channelDao.setSortIndex(it.id, number)
+            }
+        }
+    }
+
+    /** Back to the provider's own number. */
+    fun resetNumber(row: Row) {
+        viewModelScope.launch { row.variants.forEach { channelDao.setCustomNumber(it.id, null) } }
     }
 
     /** Switch the live guide's provider filter; the category resets since categories differ per source. */
@@ -510,6 +675,7 @@ class ChannelsViewModel(app: Application) : AndroidViewModel(app) {
         selectedSource.value = sourceId
         selectedCategory.value = null
         favouritesOnly.value = false
+        selectedList.value = null
     }
 
     fun search(text: String) { query.value = text }

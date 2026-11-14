@@ -134,6 +134,10 @@ class PlayerController(
             val custom = buildMap<String, androidx.media3.datasource.DataSource.Factory> {
                 if (smbDataSourceFactory != null) put("smb", smbDataSourceFactory)
                 if (growingDataSourceFactory != null) put("optvrec", growingDataSourceFactory)
+                // Recordings uploaded to the user's WebDAV cloud play straight from there, authenticated.
+                val cloud = CloudDataSource.Factory(context)
+                put("davs", cloud)
+                put("dav", cloud)
             }
             if (custom.isEmpty()) default else RoutingDataSourceFactory(default, custom)
         }
@@ -268,7 +272,15 @@ class PlayerController(
         switchJob = scope.launch {
             if (debounce) delay(switchDebounceMillis)
 
+            // VPN kill switch: refuse to open any stream outside the tunnel.
+            if (vpn.isBlocked()) {
+                player.stop()
+                _state.value = State.Error(request.title, appContext.getString(app.opentv.R.string.vpn_kill_blocked), canRetry = true)
+                return@launch
+            }
+
             consecutiveFailures = 0
+            diagnostics.reset()
             httpFactory.setDefaultRequestProperties(mapOf("User-Agent" to request.userAgent))
             _state.value = State.Buffering(request.title)
 
@@ -296,6 +308,24 @@ class PlayerController(
                 }
                 playWhenReady = true
                 prepare()
+            }
+        }
+    }
+
+    private val appContext = context.applicationContext
+    private val vpn = app.opentv.vpn.VpnController.get(context)
+
+    /** Live stream diagnosis (bitrate, codec, buffer, throughput, server, link) for the info panel. */
+    val diagnostics = StreamDiagnostics(context.applicationContext, player)
+
+    init {
+        // The tunnel dropped while something plays and the kill switch is on: cut it immediately.
+        scope.launch {
+            vpn.status.collect {
+                if (vpn.isBlocked() && player.isPlaying) {
+                    player.stop()
+                    _state.value = State.Error(current?.title.orEmpty(), appContext.getString(app.opentv.R.string.vpn_kill_dropped), canRetry = true)
+                }
             }
         }
     }

@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,6 +35,8 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
@@ -103,6 +107,9 @@ fun MainScreen(
     onPlayRecording: (Recording) -> Unit,
     onPlayCatchup: (mediaKey: String, url: String, title: String, ua: String) -> Unit,
     activeProfileName: String,
+    onOpenVpn: () -> Unit = {},
+    onOpenChannelOrder: () -> Unit = {},
+    onOpenPhoneRemote: () -> Unit = {},
 ) {
     // Content-type toggles: a switched-off type has its tab hidden here (and its sync skipped in
     // CatalogRepository). Recordings is never a content type, so it always stays — which also means
@@ -159,9 +166,13 @@ fun MainScreen(
     // The rail sits beside the content and pushes it, rather than floating over it. The Live TV
     // screen has its own category rail down its left edge, and an overlaying menu would land on top
     // of it and leave a sliver poking out — so they live side by side and never collide.
+    // Phones get the design's bottom navigation bar instead of the side rail (TVs and tablets
+    // keep the rail, which suits a D-pad and a wide screen).
+    val phoneLayout = !isTelevision && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
+    val channelsVm: app.opentv.ui.ChannelsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     Column(Modifier.fillMaxSize()) {
       Row(Modifier.weight(1f).fillMaxWidth()) {
-        NavRail(
+        if (!phoneLayout) NavRail(
             tabs = visibleTabs,
             current = tab,
             onSelect = { tab = it },
@@ -169,11 +180,14 @@ fun MainScreen(
             onOpenSettings = onOpenSettings,
             onOpenProfiles = onOpenProfiles,
             activeProfileName = activeProfileName,
+            onOpenVpn = onOpenVpn,
+            onOpenPhoneRemote = onOpenPhoneRemote,
         )
 
         Box(Modifier.weight(1f).fillMaxHeight()) {
             when (tab) {
                 Tab.LIVE -> HomeScreen(
+                    onOpenChannelOrder = onOpenChannelOrder,
                     isTelevision = isTelevision,
                     hasSources = hasSources,
                     isSyncing = isSyncing,
@@ -201,6 +215,53 @@ fun MainScreen(
         }
       }
       StatusBar()
+      if (phoneLayout) {
+          PhoneBottomBar(
+              current = tab,
+              onSelect = { tab = it },
+              onFavourites = { tab = Tab.LIVE; channelsVm.selectFavourites() },
+              onSettings = onOpenSettings,
+          )
+      }
+    }
+}
+
+/**
+ * The phone layout's bottom bar from the design: Live TV · Serien · Filme · Favoriten ·
+ * Einstellungen — the active item in electric cyan with a small glowing bar above it.
+ */
+@Composable
+private fun PhoneBottomBar(current: Tab, onSelect: (Tab) -> Unit, onFavourites: () -> Unit, onSettings: () -> Unit) {
+    val items = listOf(
+        Triple(Icons.Filled.LiveTv, R.string.nav_live_tv) { onSelect(Tab.LIVE) },
+        Triple(Icons.Filled.Tv, R.string.nav_shows) { onSelect(Tab.SHOWS) },
+        Triple(Icons.Filled.Movie, R.string.nav_movies) { onSelect(Tab.MOVIES) },
+        Triple(Icons.Filled.Favorite, R.string.nav_favourites, onFavourites),
+        Triple(Icons.Filled.Settings, R.string.nav_settings, onSettings),
+    )
+    val activeIndex = when (current) { Tab.LIVE -> 0; Tab.SHOWS -> 1; Tab.MOVIES -> 2; else -> -1 }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(app.opentv.ui.theme.Obsidian.Surface)
+            .navigationBarsPadding()
+            .height(64.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items.forEachIndexed { i, (icon, label, action) ->
+            val active = i == activeIndex
+            val tint = if (active) app.opentv.ui.theme.Obsidian.Cyan else app.opentv.ui.theme.Obsidian.TextMid
+            Column(
+                Modifier.weight(1f).fillMaxHeight().clickable(onClick = action),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+            ) {
+                Box(Modifier.width(24.dp).height(3.dp).background(if (active) tint else androidx.compose.ui.graphics.Color.Transparent))
+                Spacer(Modifier.height(6.dp))
+                Icon(icon, contentDescription = null, tint = tint)
+                Text(stringResource(label), style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+            }
+        }
     }
 }
 
@@ -263,7 +324,11 @@ private fun NavRail(
     onOpenProfiles: () -> Unit,
     activeProfileName: String,
     modifier: Modifier = Modifier,
+    onOpenVpn: () -> Unit = {},
+    onOpenPhoneRemote: () -> Unit = {},
 ) {
+    // VPN state for the shield in the rail: cyan while the tunnel is up.
+    val vpnStatus by app.opentv.vpn.VpnController.get(androidx.compose.ui.platform.LocalContext.current).status.collectAsState()
     // Expand whenever focus is anywhere inside the rail; collapse back to icons when it leaves.
     var expanded by remember { mutableStateOf(false) }
     val width by animateDpAsState(
@@ -314,6 +379,14 @@ private fun NavRail(
         Spacer(Modifier.weight(1f))
 
         RailItem(Icons.Filled.Search, stringResource(R.string.nav_search), expanded, false, onOpenSearch)
+        RailItem(
+            Icons.Filled.VpnKey,
+            stringResource(if (vpnStatus == app.opentv.vpn.VpnController.Status.CONNECTED) R.string.vpn_rail_on else R.string.vpn_title),
+            expanded,
+            vpnStatus == app.opentv.vpn.VpnController.Status.CONNECTED,
+            onOpenVpn,
+        )
+        RailItem(Icons.Filled.SettingsRemote, stringResource(R.string.remote_rail), expanded, false, onOpenPhoneRemote)
         RailItem(Icons.Filled.Person, activeProfileName, expanded, false, onOpenProfiles)
         RailItem(Icons.Filled.Settings, stringResource(R.string.nav_settings), expanded, false, onOpenSettings)
     }
@@ -328,13 +401,14 @@ private fun RailItem(
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    // Design system: focused = solid electric cyan, current tab = cyan icon/label on a cyan tint.
     val bg = when {
         focused -> MaterialTheme.colorScheme.primary
-        selected -> MaterialTheme.colorScheme.surfaceVariant
+        selected -> app.opentv.ui.theme.Obsidian.CyanTint
         else -> MaterialTheme.colorScheme.surface
     }
     val tint = if (focused) MaterialTheme.colorScheme.onPrimary
-    else if (selected) MaterialTheme.colorScheme.onSurface
+    else if (selected) MaterialTheme.colorScheme.primary
     else MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(

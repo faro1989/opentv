@@ -7,6 +7,7 @@ package app.opentv.ui.channels
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,12 +79,14 @@ import app.opentv.data.model.Channel
 import app.opentv.data.model.Programme
 import app.opentv.data.model.Reminder
 import app.opentv.data.model.shownName
+import app.opentv.data.model.shownNumber
 import app.opentv.reminders.ReminderScheduler
 import app.opentv.player.PlaybackQueue
 import app.opentv.player.PlayerController
 import app.opentv.ui.ChannelsViewModel
 import app.opentv.ui.RecordingBackgroundDialog
 import app.opentv.ui.RecordingBackgroundPrompt
+import app.opentv.ui.theme.Obsidian
 import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -116,6 +119,7 @@ fun HomeScreen(
     onRefresh: () -> Unit,
     onPlayCatchup: (mediaKey: String, url: String, title: String, ua: String) -> Unit = { _, _, _, _ -> },
     viewModel: ChannelsViewModel = viewModel(),
+    onOpenChannelOrder: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val graph = remember { ServiceLocator.get(context) }
@@ -127,6 +131,14 @@ fun HomeScreen(
     val rows by viewModel.rows.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val favouritesOnly by viewModel.favouritesOnly.collectAsState()
+    val favouriteLists by viewModel.favouriteLists.collectAsState()
+    val selectedListId by viewModel.selectedList.collectAsState()
+    val movingKey by viewModel.movingKey.collectAsState()
+    // Multiple favourites lists: the channel whose "add to list" dialog is open, and the manager.
+    var addToListRow by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
+    var showManageLists by remember { mutableStateOf(false) }
+    // "Kanalnummer zuweisen": the channel whose number dialog is open.
+    var numberRow by remember { mutableStateOf<ChannelsViewModel.Row?>(null) }
     val sources by viewModel.sources.collectAsState()
     val selectedSource by viewModel.selectedSource.collectAsState()
     val windowStart by viewModel.windowStartMillis.collectAsState()
@@ -207,6 +219,8 @@ fun HomeScreen(
     // and is stopped before any hand-off to full-screen, so the box never runs two decoders at
     // once — the thing that used to lock up cheap sticks.
     val previewScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
+    // Live stats of the muted preview for the hero's Bitrate / Server tiles.
+    var previewStats by remember { mutableStateOf<app.opentv.player.StreamDiagnostics.Snapshot?>(null) }
     val previewController = remember {
         PlayerController(context, previewScope, graph.httpClient, subtitlesEnabled = false, preview = true)
             .also { it.player.volume = 0f }
@@ -224,7 +238,7 @@ fun HomeScreen(
     var pendingLiveChannel by remember { mutableStateOf<Channel?>(null) }
     fun startLive(channel: Channel) {
         PlaybackQueue.items = rows.map {
-            PlaybackQueue.Item(it.primary.id, it.primary.shownName, it.primary.logoUrl, it.primary.number)
+            PlaybackQueue.Item(it.primary.id, it.primary.shownName, it.primary.logoUrl, it.primary.shownNumber)
         }
         previewController.stop()
         onPlayChannel(channel)
@@ -265,6 +279,16 @@ fun HomeScreen(
     // Preview audio follows the setting; muted by default so browsing stays quiet.
     LaunchedEffect(previewSound) {
         previewController.player.volume = if (previewSound) 1f else 0f
+    }
+
+    // Refresh the hero's Bitrate / Server tiles from the preview stream every two seconds.
+    LaunchedEffect(previewController) {
+        while (true) {
+            previewStats = if (previewController.player.isPlaying) {
+                runCatching { previewController.diagnostics.snapshot() }.getOrNull()
+            } else null
+            kotlinx.coroutines.delay(2_000)
+        }
     }
 
     // Tune the preview to the highlighted channel, so it follows the d-pad as you browse — the
@@ -353,8 +377,32 @@ fun HomeScreen(
                         modifier = if (favouritesOnly) Modifier.focusRequester(railFocusRequester) else Modifier,
                     )
                 }
+                // The user's own lists sit right under the built-in favourites, then "Manage lists".
+                items(favouriteLists, key = { "favlist-${it.id}" }) { list ->
+                    val listSelected = selectedListId == list.id
+                    RailEntry(
+                        label = "☆ " + list.name,
+                        selected = listSelected,
+                        onClick = { viewModel.selectList(list.id) },
+                        modifier = if (listSelected) Modifier.focusRequester(railFocusRequester) else Modifier,
+                    )
+                }
+                item(key = "favlist-manage") {
+                    RailEntry(
+                        label = stringResource(R.string.favlist_manage_rail),
+                        selected = false,
+                        onClick = { showManageLists = true },
+                    )
+                }
+                item(key = "channel-order") {
+                    RailEntry(
+                        label = "⇅ " + stringResource(R.string.order_title),
+                        selected = false,
+                        onClick = onOpenChannelOrder,
+                    )
+                }
                 item {
-                    val allSelected = !favouritesOnly && selectedCategory == null
+                    val allSelected = !favouritesOnly && selectedListId == null && selectedCategory == null
                     RailEntry(
                         label = stringResource(R.string.guide_all_channels),
                         selected = allSelected,
@@ -363,7 +411,7 @@ fun HomeScreen(
                     )
                 }
                 items(categories, key = { it.key }) { group ->
-                    val groupSelected = !favouritesOnly && selectedCategory == group.key
+                    val groupSelected = !favouritesOnly && selectedListId == null && selectedCategory == group.key
                     RailEntry(
                         label = group.label,
                         selected = groupSelected,
@@ -379,6 +427,7 @@ fun HomeScreen(
             if (rows.isEmpty()) {
                 when {
                     favouritesOnly -> NoFavouritesState()
+                    selectedListId != null -> EmptyFavouriteListState()
                     // Work genuinely in progress: a sync is running, the catalogue check hasn't
                     // returned yet, or channels ARE on disk and the guide is still building. A
                     // large provider takes a while, and showing "No channels" during it reads as
@@ -432,6 +481,7 @@ fun HomeScreen(
                     canGoPrevDay = guideDayOffset > 0,
                     onPrevDay = { viewModel.nudgeGuideDay(-1) },
                     onNextDay = { viewModel.nudgeGuideDay(1) },
+                    stats = previewStats,
                 )
                 // Shared by both layouts: focus follows the highlight and collapses the rail; LEFT
                 // from the leftmost element reopens the rail (consumed only when it was hidden).
@@ -456,6 +506,11 @@ fun HomeScreen(
                         onFocusRow = onFocusChannel,
                         onToggleFavourite = { viewModel.toggleFavourite(it) },
                         onExitLeftFromChannel = onExitLeftChannel,
+                        canReorder = selectedListId != null,
+                        movingKey = movingKey,
+                        onStartMove = viewModel::startMove,
+                        onMoveStep = { row, delta -> viewModel.moveInList(row, delta) },
+                        onEndMove = viewModel::endMove,
                         modifier = Modifier.weight(1f).padding(start = 12.dp, end = 12.dp),
                     )
                 } else {
@@ -724,6 +779,44 @@ fun HomeScreen(
                         channelMenu = null
                         requestLive(channel)
                     }
+                    RecordActionRow(stringResource(R.string.favlist_add_menu)) {
+                        channelMenu = null
+                        addToListRow = menuRow
+                    }
+                    RecordActionRow(stringResource(R.string.chnum_menu)) {
+                        channelMenu = null
+                        numberRow = menuRow
+                    }
+                    // Browsing one of the user's lists: reorder or drop the channel right here.
+                    if (selectedListId != null) {
+                        val listId = selectedListId
+                        val position = rows.indexOfFirst { it.key == menuRow.key }
+                        // Drag & drop with the remote: pick the card up, carry it with up/down, OK drops it.
+                        if (channelLayout == AppSettings.ChannelLayout.LIST && rows.size > 1) {
+                            RecordActionRow(stringResource(R.string.favlist_move_mode), primary = true) {
+                                viewModel.startMove(menuRow)
+                                channelMenu = null
+                            }
+                        }
+                        if (position > 0) {
+                            RecordActionRow(stringResource(R.string.favlist_move_up)) {
+                                viewModel.moveInList(menuRow, -1)
+                                channelMenu = null
+                            }
+                        }
+                        if (position in 0 until rows.lastIndex) {
+                            RecordActionRow(stringResource(R.string.favlist_move_down)) {
+                                viewModel.moveInList(menuRow, 1)
+                                channelMenu = null
+                            }
+                        }
+                        if (listId != null) {
+                            RecordActionRow(stringResource(R.string.favlist_remove_here)) {
+                                viewModel.toggleInList(listId, menuRow, isIn = true)
+                                channelMenu = null
+                            }
+                        }
+                    }
                     RecordActionRow(stringResource(R.string.guide_open_external)) {
                         channelMenu = null
                         recordScope.launch {
@@ -790,6 +883,60 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    addToListRow?.let { row ->
+        // Which lists already hold this channel — loaded once per open, then kept in step locally
+        // so the ✓ flips the moment OK is pressed instead of waiting on the database round-trip.
+        var containing by remember(row.key) { mutableStateOf<Set<Long>>(emptySet()) }
+        LaunchedEffect(row.key) { containing = viewModel.listsContaining(row) }
+        AddToListDialog(
+            channelName = row.primary.shownName,
+            lists = favouriteLists,
+            containing = containing,
+            onToggle = { listId, isIn ->
+                viewModel.toggleInList(listId, row, isIn)
+                containing = if (isIn) containing - listId else containing + listId
+                val name = favouriteLists.firstOrNull { it.id == listId }?.name.orEmpty()
+                Toast.makeText(
+                    context,
+                    context.getString(if (isIn) R.string.favlist_removed else R.string.favlist_added, name),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            },
+            onCreate = { name -> viewModel.createList(name, row) },
+            onDismiss = { addToListRow = null },
+        )
+    }
+
+    numberRow?.let { row ->
+        ChannelNumberDialog(
+            channelName = row.primary.shownName,
+            currentNumber = row.primary.shownNumber,
+            hasCustomNumber = row.primary.customNumber != null,
+            findOccupant = { viewModel.numberOccupant(row, it) },
+            suggestFree = { viewModel.nextFreeNumber() },
+            onSave = { n, swap, sync ->
+                viewModel.assignNumber(row, n, swap, sync)
+                Toast.makeText(context, context.getString(R.string.chnum_saved, row.primary.shownName, "%03d".format(n)), Toast.LENGTH_SHORT).show()
+                numberRow = null
+            },
+            onReset = {
+                viewModel.resetNumber(row)
+                numberRow = null
+            },
+            onDismiss = { numberRow = null },
+        )
+    }
+
+    if (showManageLists) {
+        ManageListsDialog(
+            lists = favouriteLists,
+            onCreate = { viewModel.createList(it) },
+            onRename = { id, name -> viewModel.renameList(id, name) },
+            onDelete = { viewModel.deleteList(it) },
+            onDismiss = { showManageLists = false },
+        )
     }
 
     if (showBackgroundPrompt) {
@@ -884,26 +1031,47 @@ private fun QualityChip(label: String, selected: Boolean, onClick: () -> Unit) {
     )
 }
 
+/**
+ * A category as a design-system chip: pill-shaped, translucent charcoal when idle; cyan-tinted with
+ * a cyan hairline, bold white text and a glowing cyan dot when active; solid cyan ring on focus.
+ */
 @Composable
 private fun RailEntry(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Text(
-        text = label,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-        else MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = modifier
+    var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(50)
+    Row(
+        modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surface,
+            .padding(vertical = 2.dp)
+            .clip(shape)
+            .background(if (selected || focused) Obsidian.CyanTint else Obsidian.Surface)
+            .border(
+                width = if (focused) 2.dp else 1.dp,
+                color = when {
+                    focused -> Obsidian.Cyan
+                    selected -> Obsidian.CyanGlow
+                    else -> Obsidian.Hairline
+                },
+                shape = shape,
             )
+            .onFocusChanged { focused = it.isFocused }
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-    )
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (selected) {
+            Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(Obsidian.Cyan))
+            Spacer(Modifier.width(10.dp))
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected || focused) Obsidian.TextHigh else Obsidian.TextMid,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 @Composable
@@ -1029,6 +1197,23 @@ private fun LoadingState(isSyncing: Boolean) {
                     modifier = Modifier.fillMaxWidth().height(6.dp),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyFavouriteListState() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(stringResource(R.string.favlist_empty_list_title), style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.favlist_empty_list_desc),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 480.dp),
+            )
         }
     }
 }

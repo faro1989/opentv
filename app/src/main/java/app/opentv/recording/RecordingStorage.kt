@@ -59,6 +59,17 @@ object RecordingStorage {
         password = settings.smbPassword.value,
     )
 
+    /**
+     * Staging folder for CLOUD recordings: they are captured here (watchable while recording, and
+     * immune to the upload link dropping mid-show), then uploaded by [CloudUploadWorker] when done.
+     */
+    fun cloudStagingDir(context: Context): File =
+        File(context.getExternalFilesDir(null), "cloud-upload").apply { mkdirs() }
+
+    /** True for a locally staged recording still waiting for (or failing) its cloud upload. */
+    fun isCloudStaged(context: Context, locator: String): Boolean =
+        locator.startsWith(cloudStagingDir(context).absolutePath)
+
     /** Internal recordings dir on the device's own (app-private) external storage — no permission needed. */
     fun internalDir(context: Context): File =
         File(context.getExternalFilesDir(null), "recordings").apply { mkdirs() }
@@ -77,6 +88,8 @@ object RecordingStorage {
                 USB_PLACEHOLDER_PREFIX + filename
             AppSettings.RecordingTarget.INTERNAL ->
                 File(internalDir(context), filename).absolutePath
+            AppSettings.RecordingTarget.CLOUD ->
+                File(cloudStagingDir(context), filename).absolutePath
         }
 
     /** True for a `content://` locator — a USB recording created through SAF. */
@@ -141,6 +154,7 @@ object RecordingStorage {
     fun delete(context: Context, settings: AppSettings, locator: String) {
         when {
             SmbClient.isSmb(locator) -> runCatching { SmbClient.delete(smbConfig(settings), locator) }
+            CloudClient.isCloud(locator) -> runCatching { CloudClient.delete(CloudClient.config(settings), locator) }
             isContent(locator) ->
                 runCatching { DocumentFile.fromSingleUri(context, Uri.parse(locator))?.delete() }
             isUsbPlaceholder(locator) -> Unit // never created — nothing on disk to remove
@@ -153,8 +167,36 @@ object RecordingStorage {
      * instead).
      */
     fun sizeOf(locator: String): Long =
-        if (SmbClient.isSmb(locator) || isContent(locator) || isUsbPlaceholder(locator)) -1L
+        if (SmbClient.isSmb(locator) || CloudClient.isCloud(locator) || isContent(locator) || isUsbPlaceholder(locator)) -1L
         else File(locator).length()
+
+    /** Where a recording lives, as the kind of storage plus a readable place. Shown in the library. */
+    enum class Place { INTERNAL, USB, NAS, CLOUD, CLOUD_PENDING }
+
+    fun placeOf(context: Context, locator: String): Place = when {
+        CloudClient.isCloud(locator) -> Place.CLOUD
+        isCloudStaged(context, locator) -> Place.CLOUD_PENDING
+        SmbClient.isSmb(locator) -> Place.NAS
+        isContent(locator) || isUsbPlaceholder(locator) -> Place.USB
+        else -> Place.INTERNAL
+    }
+
+    /**
+     * "Interner Speicher · /storage/emulated/0/…/recordings", "USB/SD · Movies", "NAS · 192.168.1.10/video/OpenTV",
+     * "pCloud (EU) · /OpenTV" — the answer to "where did it save that?".
+     */
+    fun describe(context: Context, settings: AppSettings, locator: String): String = when (placeOf(context, locator)) {
+        Place.CLOUD -> CloudClient.describe(settings, locator)
+        Place.CLOUD_PENDING -> context.getString(R.string.rec_place_cloud_pending)
+        Place.NAS -> locator.removePrefix("smb://").substringBeforeLast('/')
+        Place.USB -> {
+            val name = if (isContent(locator)) {
+                runCatching { DocumentFile.fromSingleUri(context, Uri.parse(locator))?.name }.getOrNull()
+            } else null
+            listOfNotNull(settings.usbFolderLabel.value, name).joinToString(" / ").ifEmpty { "USB / SD" }
+        }
+        Place.INTERNAL -> File(locator).parent ?: locator
+    }
 
     /** A filesystem-safe recording filename: `Channel - 2026-08-02 1830.ts`. */
     fun fileNameFor(channelName: String, title: String, startMillis: Long): String {

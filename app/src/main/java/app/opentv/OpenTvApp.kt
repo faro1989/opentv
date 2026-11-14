@@ -70,6 +70,27 @@ class OpenTvApp : Application(), ImageLoaderFactory {
         // opens — so checking on a recording you just started never marks it interrupted.
         appScope.launch { runCatching { graph.recordingRepository.failInterrupted() } }
 
+        // Built-in VPN: bring the tunnel up at launch when the user turned on auto-connect (and has
+        // already allowed VPN use once), so streams never start outside it.
+        appScope.launch { runCatching { app.opentv.vpn.VpnController.get(this@OpenTvApp).autoConnectIfWanted() } }
+
+        // "Speicher & Cloud": free space if the user asked for auto-cleanup, keep live sync scheduled,
+        // and run one sync now so a freshly opened app is up to date.
+        appScope.launch { runCatching { app.opentv.recording.StorageManager.cleanupIfNeeded(this@OpenTvApp) } }
+        runCatching { app.opentv.sync.CloudSync.schedule(this) }
+
+        // A restored backup waits for the provider's channels before merging favourites & co.
+        appScope.launch {
+            repeat(40) {
+                runCatching { app.opentv.sync.BackupManager.applyPendingIfReady(this@OpenTvApp) }
+                if (!java.io.File(filesDir, "pending-restore.json").exists()) return@launch
+                kotlinx.coroutines.delay(30_000)
+            }
+        }
+        if (graph.settings.cloudLiveSync.value) {
+            appScope.launch { runCatching { app.opentv.sync.CloudSync(graph).sync(this@OpenTvApp) } }
+        }
+
         // Re-arm scheduled recordings on every launch, for the same reason as the reminders below:
         // a force-stop or app update drops their exact alarms and only a reboot is covered by the
         // boot receiver. Re-setting the same alarm is idempotent, so this quietly keeps bookings alive.

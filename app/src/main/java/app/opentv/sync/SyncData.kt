@@ -28,7 +28,7 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class SyncBundle(
-    val version: Int = 3,
+    val version: Int = 4,
     val generatedAtMillis: Long = 0,
     /** Profile names the peer knows about. Others add any they are missing (add-only). */
     val profiles: List<String> = emptyList(),
@@ -47,7 +47,16 @@ data class SyncBundle(
      * never shared — they cannot be opened from another box.
      */
     val recordings: List<SyncRecording> = emptyList(),
+    /** The user's named favourites lists, channels by stream URL, in list order (add-only merge). */
+    val favouriteLists: List<SyncFavouriteList> = emptyList(),
+    /** Own channel numbers by stream URL. A device keeps its own number where it already has one. */
+    val channelNumbers: Map<String, Int> = emptyMap(),
+    /** Channels locked behind the parental PIN, by stream URL (additive — a lock never vanishes). */
+    val lockedChannels: List<String> = emptyList(),
 )
+
+@Serializable
+data class SyncFavouriteList(val name: String, val streamUrls: List<String>)
 
 @Serializable
 data class SyncPosition(

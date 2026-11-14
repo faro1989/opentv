@@ -184,6 +184,7 @@ object ManagerPage {
 
           <div id="status"></div>
 
+        <script>${LanCrypto.JS}</script>
         <script>
           var EMBEDDED_TOKEN = "$token";
           var token = new URLSearchParams(location.search).get('t') || EMBEDDED_TOKEN;
@@ -212,7 +213,9 @@ object ManagerPage {
           async function post(path, bodyObj){
             var r = await fetch(withToken(path), {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(bodyObj)
+              // Opened via the QR code: every change (incl. provider / NAS logins) travels
+              // AES-256 encrypted + HMAC-authenticated with the key from the #fragment.
+              body: OTVC.hasKey() ? 'OTVE:' + OTVC.seal(JSON.stringify(bodyObj)) : JSON.stringify(bodyObj)
             });
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();

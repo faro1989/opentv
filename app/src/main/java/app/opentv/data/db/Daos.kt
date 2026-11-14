@@ -17,6 +17,8 @@ import app.opentv.data.model.Channel
 import app.opentv.data.model.EpgChannelAlias
 import app.opentv.data.model.EpgFeed
 import app.opentv.data.model.Episode
+import app.opentv.data.model.FavouriteList
+import app.opentv.data.model.FavouriteListEntry
 import app.opentv.data.model.Movie
 import app.opentv.data.model.PlaybackPosition
 import app.opentv.data.model.Profile
@@ -183,6 +185,9 @@ interface ChannelDao {
     @Query("SELECT COUNT(*) FROM channels WHERE hidden = 0")
     fun observeVisibleCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM channels WHERE hidden = 0")
+    suspend fun countVisible(): Int
+
     @Query("UPDATE channels SET favourite = :favourite WHERE id = :id")
     suspend fun setFavourite(id: Long, favourite: Boolean)
 
@@ -272,6 +277,7 @@ interface ChannelDao {
                     sortIndex = previous.sortIndex,
                     // A user's rename must outlive the provider's fresh name on every refresh.
                     customName = previous.customName,
+                    customNumber = previous.customNumber,
                     epgOverrideId = previous.epgOverrideId,
                     matchedEpgId = previous.matchedEpgId,
                     lastSeenMillis = syncStamp,
@@ -285,6 +291,34 @@ interface ChannelDao {
 
     @Query("SELECT * FROM channels WHERE sourceId = :sourceId")
     suspend fun userStateForSource(sourceId: Long): List<Channel>
+
+    // --- Channel numbers ("Kanalnummer zuweisen") ---------------------------------------------
+    /** Every channel currently answering to number [n] (the user's own number, else the provider's). */
+    @Query("SELECT * FROM channels WHERE hidden = 0 AND COALESCE(customNumber, number) = :n")
+    suspend fun byShownNumber(n: Int): List<Channel>
+
+    @Query("SELECT DISTINCT COALESCE(customNumber, number) FROM channels WHERE hidden = 0 AND COALESCE(customNumber, number) IS NOT NULL")
+    suspend fun usedNumbers(): List<Int>
+
+    @Query("UPDATE channels SET customNumber = :n WHERE id = :id")
+    suspend fun setCustomNumber(id: Long, n: Int?)
+
+    /** Every channel, hidden ones included, for the numbering & order manager. */
+    @Query("SELECT * FROM channels WHERE (:sourceId IS NULL OR sourceId = :sourceId) ORDER BY sortIndex, displayName")
+    suspend fun allForManager(sourceId: Long?): List<Channel>
+
+    @Query("UPDATE channels SET customNumber = NULL")
+    suspend fun clearAllCustomNumbers()
+
+    // --- Sync / backup helpers: channels addressed by stream URL (stable across devices) ---------
+    @Query("SELECT * FROM channels WHERE streamUrl = :url LIMIT 1")
+    suspend fun byStreamUrl(url: String): Channel?
+
+    @Query("SELECT * FROM channels WHERE sourceId = :sourceId AND streamId = :streamId LIMIT 1")
+    suspend fun bySourceStream(sourceId: Long, streamId: String): Channel?
+
+    @Query("SELECT * FROM channels WHERE customNumber IS NOT NULL")
+    suspend fun withCustomNumber(): List<Channel>
 }
 
 @Dao
@@ -793,4 +827,70 @@ interface ReminderDao {
     /** Housekeeping: drop reminders whose programme has already ended. */
     @Query("DELETE FROM reminders WHERE endUtcMillis < :beforeMillis")
     suspend fun deleteEndedBefore(beforeMillis: Long)
+}
+
+@Dao
+interface FavouriteListDao {
+    @Query("SELECT * FROM favourite_lists ORDER BY sortIndex, createdAtMillis")
+    fun observeLists(): Flow<List<FavouriteList>>
+
+    @Query("SELECT COALESCE(MAX(sortIndex), -1) + 1 FROM favourite_lists")
+    suspend fun nextListIndex(): Int
+
+    @Insert
+    suspend fun insertList(list: FavouriteList): Long
+
+    @Query("UPDATE favourite_lists SET name = :name WHERE id = :id")
+    suspend fun rename(id: Long, name: String)
+
+    @Query("DELETE FROM favourite_lists WHERE id = :id")
+    suspend fun deleteListRow(id: Long)
+
+    @Query("DELETE FROM favourite_list_entries WHERE listId = :id")
+    suspend fun clearEntries(id: Long)
+
+    /** Deletes a list together with its entries. The channels themselves are untouched. */
+    @Transaction
+    suspend fun deleteList(id: Long) {
+        clearEntries(id)
+        deleteListRow(id)
+    }
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun addEntry(entry: FavouriteListEntry)
+
+    @Query("DELETE FROM favourite_list_entries WHERE listId = :listId AND sourceId = :sourceId AND streamId = :streamId")
+    suspend fun removeEntry(listId: Long, sourceId: Long, streamId: String)
+
+    @Query("SELECT COALESCE(MAX(sortIndex), -1) + 1 FROM favourite_list_entries WHERE listId = :listId")
+    suspend fun nextEntryIndex(listId: Long): Int
+
+    @Query("UPDATE favourite_list_entries SET sortIndex = :sortIndex WHERE listId = :listId AND sourceId = :sourceId AND streamId = :streamId")
+    suspend fun setEntryIndex(listId: Long, sourceId: Long, streamId: String, sortIndex: Int)
+
+    @Query("SELECT DISTINCT listId FROM favourite_list_entries WHERE sourceId = :sourceId AND streamId = :streamId")
+    suspend fun listsContaining(sourceId: Long, streamId: String): List<Long>
+
+    @Query("SELECT * FROM favourite_lists ORDER BY sortIndex, createdAtMillis")
+    suspend fun allLists(): List<FavouriteList>
+
+    @Query(
+        """
+        SELECT c.streamUrl FROM channels c
+        INNER JOIN favourite_list_entries e ON e.sourceId = c.sourceId AND e.streamId = c.streamId
+        WHERE e.listId = :listId ORDER BY e.sortIndex
+        """,
+    )
+    suspend fun streamUrlsOf(listId: Long): List<String>
+
+    /** The list's channels in the user's order. Hidden channels stay out, like the main favourites. */
+    @Query(
+        """
+        SELECT c.* FROM channels c
+        INNER JOIN favourite_list_entries e ON e.sourceId = c.sourceId AND e.streamId = c.streamId
+        WHERE e.listId = :listId AND c.hidden = 0
+        ORDER BY e.sortIndex, c.displayName
+        """,
+    )
+    fun observeChannels(listId: Long): Flow<List<Channel>>
 }

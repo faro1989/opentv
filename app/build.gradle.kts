@@ -118,6 +118,13 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     implementation(libs.androidx.tv.material)
+    // Built-in VPN: WireGuard's official userspace tunnel (Apache-2.0), driven through VpnService.
+    implementation(libs.wireguard.tunnel)
+    // Encrypted database (AES-256): provider logins and the credential-bearing stream URLs.
+    implementation(libs.sqlcipher.android)
+    implementation(libs.androidx.sqlite)
+    // SMB3 encryption ciphers (AES-CCM/GCM) for the NAS.
+    implementation(libs.bouncycastle)
     implementation(libs.androidx.navigation.compose)
 
     implementation(libs.media3.exoplayer)

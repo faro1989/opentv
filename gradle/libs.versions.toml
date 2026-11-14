@@ -57,6 +57,10 @@ room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 
+sqlcipher-android = { group = "net.zetetic", name = "sqlcipher-android", version = "4.6.1" }
+androidx-sqlite = { group = "androidx.sqlite", name = "sqlite", version = "2.4.0" }
+bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version = "1.78.1" }
+wireguard-tunnel = { group = "com.wireguard.android", name = "tunnel", version = "1.0.20230706" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
 

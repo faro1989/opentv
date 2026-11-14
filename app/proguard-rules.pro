@@ -56,3 +56,16 @@
 -dontwarn org.slf4j.**
 -dontwarn org.ietf.jgss.**
 -dontwarn javax.security.**
+
+# WireGuard tunnel: the Go backend calls back into these classes over JNI.
+-keep class com.wireguard.android.backend.** { *; }
+-keep class com.wireguard.config.** { *; }
+-keep class com.wireguard.crypto.** { *; }
+
+# SQLCipher: JNI entry points.
+-keep class net.zetetic.database.** { *; }
+-keep class net.zetetic.database.sqlcipher.** { *; }
+
+# Bouncy Castle (SMB3 encryption via smbj).
+-keep class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**

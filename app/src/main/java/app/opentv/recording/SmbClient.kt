@@ -91,12 +91,35 @@ object SmbClient {
     // drive spinning up, the session dropping) blocks forever — which silently freezes a recording
     // mid-capture with no error. A timeout turns that hang into a normal dropped-connection the
     // capture loop can retry.
-    private val smbjConfig by lazy {
-        com.hierynomus.smbj.SmbConfig.builder()
+    /**
+     * Enforce SMB3 encryption (AES on the wire) and signing. On by default: recordings and the
+     * NAS password then never cross the home network readable. Very old NAS boxes that only speak
+     * SMB2 refuse the connection — the NAS setting can switch it off for those.
+     */
+    @Volatile var requireEncryption: Boolean = true
+        set(value) { if (field != value) { field = value; cachedConfig = null } }
+
+    @Volatile private var cachedConfig: com.hierynomus.smbj.SmbConfig? = null
+
+    private val smbjConfig: com.hierynomus.smbj.SmbConfig
+        get() = cachedConfig ?: com.hierynomus.smbj.SmbConfig.builder()
             .withSoTimeout(35, java.util.concurrent.TimeUnit.SECONDS)
             .withTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .apply {
+                if (requireEncryption) {
+                    withDialects(
+                        com.hierynomus.mssmb2.SMB2Dialect.SMB_3_1_1,
+                        com.hierynomus.mssmb2.SMB2Dialect.SMB_3_0_2,
+                        com.hierynomus.mssmb2.SMB2Dialect.SMB_3_0,
+                    )
+                    withEncryptData(true)
+                    withSigningRequired(true)
+                    // Android's JCE lacks AES-CCM; Bouncy Castle provides the SMB3 ciphers.
+                    withSecurityProvider(com.hierynomus.security.bc.BCSecurityProvider())
+                }
+            }
             .build()
-    }
+            .also { cachedConfig = it }
 
     private fun connect(config: SmbConfig): Quad {
         val client = SMBClient(smbjConfig)

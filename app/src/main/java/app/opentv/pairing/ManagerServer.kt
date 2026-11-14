@@ -89,6 +89,7 @@ class ManagerServer(
 
     private var serverSocket: ServerSocket? = null
     private var token: String = ""
+    private var lanKey: ByteArray = ByteArray(0)
     @Volatile private var running = false
     @Volatile private var lastActivityMillis = 0L
 
@@ -111,6 +112,7 @@ class ManagerServer(
         // ~40 bits is ample — brute-forcing it on the local network inside the session window isn't
         // realistic.
         token = ByteArray(5).also(random::nextBytes).joinToString("") { "%02x".format(it) }
+        lanKey = LanCrypto.newKey()
 
         val socket = try {
             // Port 0 asks the OS for a free one. A fixed port would be predictable and would
@@ -128,7 +130,7 @@ class ManagerServer(
 
         _state.value = State.Listening(
             Session(
-                url = "http://$host:${socket.localPort}/?t=$token",
+                url = "http://$host:${socket.localPort}/?t=$token#k=${LanCrypto.hex(lanKey)}",
                 host = host,
                 port = socket.localPort,
             ),
@@ -209,7 +211,14 @@ class ManagerServer(
         // A valid request counts as activity; the idle watchdog measures from here.
         lastActivityMillis = System.currentTimeMillis()
 
-        val body = if (method == "POST") readBody(reader, headers) else ""
+        val rawBody = if (method == "POST") readBody(reader, headers) else ""
+        // Encrypted request from the QR-opened page: authenticate + decrypt, or refuse outright.
+        val body = if (rawBody.startsWith("OTVE:")) {
+            LanCrypto.open(rawBody.removePrefix("OTVE:"), lanKey) ?: run {
+                output.write(PairingHttp.httpResponse("403 Forbidden", "text/plain", "Bad seal."))
+                return
+            }
+        } else rawBody
 
         when {
             method == "GET" && path == "/" ->

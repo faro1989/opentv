@@ -91,6 +91,22 @@ object PairingPage {
           }
           toggle();
         </script>
+        <script>${LanCrypto.JS}</script>
+        <script>
+          // Scanned from the QR code: the key is in the #fragment (never sent over the network),
+          // so the whole form is encrypted + authenticated before it leaves the phone.
+          document.querySelector('form').addEventListener('submit', function (e) {
+            if (!OTVC.hasKey()) return;            // typed address: falls back to the plain form
+            e.preventDefault();
+            var p = new URLSearchParams(new FormData(this));
+            var body = 't=' + encodeURIComponent(p.get('t')) + '&enc=' + encodeURIComponent(OTVC.seal(p.toString()));
+            fetch('/submit', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body })
+              .then(function (r) { return r.text(); })
+              .then(function (html) { document.open(); document.write(html); document.close(); });
+          });
+          if (OTVC.hasKey()) document.querySelector('.sub').insertAdjacentHTML('afterend',
+            '<p class="sub">🔒 End-to-end encrypted with the key from the QR code.</p>');
+        </script>
         """.trimIndent(),
     )
 

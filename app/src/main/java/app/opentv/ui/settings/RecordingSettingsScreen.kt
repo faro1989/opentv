@@ -5,10 +5,14 @@
  */
 package app.opentv.ui.settings
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.FilterChip
+import app.opentv.recording.CloudClient
+import app.opentv.recording.CloudConfig
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -103,6 +108,18 @@ fun RecordingSettingsScreen(onBack: () -> Unit) {
     var status by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
 
+    // Online cloud (WebDAV) login.
+    var cloudProvider by remember { mutableStateOf(settings.cloudProvider.value) }
+    var cloudUrl by remember { mutableStateOf(settings.cloudUrl.value) }
+    var cloudUser by remember { mutableStateOf(settings.cloudUser.value) }
+    var cloudPassword by remember { mutableStateOf(settings.cloudPassword.value) }
+    var cloudFolder by remember { mutableStateOf(settings.cloudFolder.value) }
+    var cloudKeepLocal by remember { mutableStateOf(settings.cloudKeepLocal.value) }
+    var cloudE2E by remember { mutableStateOf(settings.cloudE2E.value) }
+    var cloudE2EPassword by remember { mutableStateOf(settings.cloudE2EPassword.value) }
+    var cloudStatus by remember { mutableStateOf<String?>(null) }
+    var cloudOk by remember { mutableStateOf(settings.cloudUrl.value.isNotBlank() && settings.cloudUser.value.isNotBlank()) }
+
     // Recording behaviour. These apply the moment they're changed so they hold whether the user
     // leaves via Done or Save.
     var padStart by remember { mutableStateOf(settings.recordPadStartMinutes.value) }
@@ -130,6 +147,8 @@ fun RecordingSettingsScreen(onBack: () -> Unit) {
 
     fun persist() {
         settings.setSmbConfig(host, share, folder, user, password)
+        settings.setCloudConfig(cloudProvider, cloudUrl, cloudUser, cloudPassword, cloudFolder, cloudKeepLocal)
+        settings.setCloudE2E(cloudE2E && cloudE2EPassword.length >= 8, cloudE2EPassword)
         // Don't commit USB as the destination unless a folder has actually been granted, so
         // leaving the screen without picking one can never strand recordings with nowhere to go.
         val safeTarget =
@@ -209,6 +228,108 @@ fun RecordingSettingsScreen(onBack: () -> Unit) {
                 subtitle = stringResource(R.string.recset_usb_subtitle),
                 selected = target == AppSettings.RecordingTarget.USB,
             ) { target = AppSettings.RecordingTarget.USB }
+            Spacer(Modifier.height(8.dp))
+            TargetRow(
+                label = stringResource(R.string.recset_cloud_label),
+                subtitle = if (cloudOk && cloudUser.isNotBlank()) {
+                    "${CloudClient.PROVIDERS.firstOrNull { it.id == cloudProvider }?.name ?: "Cloud"} · $cloudUser"
+                } else stringResource(R.string.recset_cloud_subtitle),
+                selected = target == AppSettings.RecordingTarget.CLOUD,
+            ) { target = AppSettings.RecordingTarget.CLOUD }
+        }
+
+        if (target == AppSettings.RecordingTarget.CLOUD) {
+            Spacer(Modifier.height(16.dp))
+            SectionCard(stringResource(R.string.recset_cloud_login)) {
+                Text(
+                    stringResource(R.string.recset_cloud_provider),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CloudClient.PROVIDERS.forEach { p ->
+                        FilterChip(
+                            selected = cloudProvider == p.id,
+                            onClick = {
+                                cloudProvider = p.id
+                                if (p.url.isNotEmpty()) cloudUrl = p.url
+                                cloudOk = false
+                            },
+                            label = { Text(p.name) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(cloudHint(cloudProvider)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.widthIn(max = 720.dp),
+                )
+                Spacer(Modifier.height(10.dp))
+                Field(stringResource(R.string.recset_cloud_url), cloudUrl, "https://…/remote.php/dav/files/{user}") { cloudUrl = it; cloudOk = false }
+                Field(stringResource(R.string.recset_cloud_user), cloudUser, "name@example.com") { cloudUser = it; cloudOk = false }
+                Field(stringResource(R.string.recset_cloud_password), cloudPassword, "", isPassword = true) { cloudPassword = it; cloudOk = false }
+                Field(stringResource(R.string.recset_field_folder), cloudFolder, "OpenTV") { cloudFolder = it }
+                // End-to-end encryption: the cloud only ever sees ciphertext.
+                ToggleRow(
+                    label = stringResource(R.string.recset_e2e_title),
+                    subtitle = stringResource(R.string.recset_e2e_desc),
+                    checked = cloudE2E,
+                ) { cloudE2E = it }
+                if (cloudE2E) {
+                    Field(stringResource(R.string.recset_e2e_password), cloudE2EPassword, "", isPassword = true) { cloudE2EPassword = it }
+                    Text(
+                        stringResource(if (cloudE2EPassword.length < 8) R.string.recset_e2e_short else R.string.recset_e2e_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (cloudE2EPassword.length < 8) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.widthIn(max = 720.dp).padding(bottom = 8.dp),
+                    )
+                }
+                ToggleRow(
+                    label = stringResource(R.string.recset_cloud_keep_local),
+                    subtitle = stringResource(R.string.recset_cloud_keep_local_desc),
+                    checked = cloudKeepLocal,
+                ) { cloudKeepLocal = it }
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    enabled = !testing && cloudUrl.isNotBlank() && cloudUser.isNotBlank() && cloudPassword.isNotBlank(),
+                    onClick = {
+                        testing = true
+                        cloudStatus = context.getString(R.string.recset_status_testing)
+                        val cfg = CloudConfig(cloudUrl, cloudUser, cloudPassword, cloudFolder)
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) { runCatching { CloudClient.test(cfg) } }
+                            testing = false
+                            cloudOk = result.isSuccess
+                            if (result.isSuccess) persist()
+                            cloudStatus = result.fold(
+                                onSuccess = { context.getString(R.string.recset_cloud_signed_in, cloudUser, cloudFolder) },
+                                onFailure = { context.getString(R.string.recset_status_failed, it.message ?: it.javaClass.simpleName) },
+                            )
+                        }
+                    },
+                ) { Text(stringResource(R.string.recset_cloud_sign_in)) }
+                cloudStatus?.let {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (cloudOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.recset_cloud_how),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.widthIn(max = 720.dp),
+                )
+            }
         }
 
         if (target == AppSettings.RecordingTarget.SMB) {
@@ -218,6 +339,12 @@ fun RecordingSettingsScreen(onBack: () -> Unit) {
                 Field(stringResource(R.string.recset_field_share), share, "video") { share = it }
                 Field(stringResource(R.string.recset_field_folder), folder, "OpenTV") { folder = it }
                 Field(stringResource(R.string.recset_field_username), user, "") { user = it }
+                val smbEncrypt by settings.smbEncrypt.collectAsState()
+                ToggleRow(
+                    label = stringResource(R.string.recset_smb_encrypt),
+                    subtitle = stringResource(R.string.recset_smb_encrypt_desc),
+                    checked = smbEncrypt,
+                ) { settings.setSmbEncrypt(it) }
                 Field(stringResource(R.string.recset_field_password), password, "", isPassword = true) { password = it }
 
                 Spacer(Modifier.height(12.dp))
@@ -310,6 +437,16 @@ fun RecordingSettingsScreen(onBack: () -> Unit) {
             onClick = { persist(); status = context.getString(R.string.recset_status_saved) },
         ) { Text(stringResource(R.string.common_save)) }
     }
+}
+
+private fun cloudHint(id: String): Int = when (id) {
+    "nextcloud" -> R.string.cloud_hint_nextcloud
+    "magenta" -> R.string.cloud_hint_magenta
+    "pcloud_eu", "pcloud_us" -> R.string.cloud_hint_pcloud
+    "koofr" -> R.string.cloud_hint_koofr
+    "hidrive" -> R.string.cloud_hint_hidrive
+    "gmx", "webde" -> R.string.cloud_hint_gmx
+    else -> R.string.cloud_hint_custom
 }
 
 /** Used-by-recordings and free-space readout for the box's internal storage. */

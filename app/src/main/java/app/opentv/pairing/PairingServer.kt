@@ -79,6 +79,7 @@ class PairingServer(private val scope: CoroutineScope) {
 
     private var serverSocket: ServerSocket? = null
     private var token: String = ""
+    private var lanKey: ByteArray = ByteArray(0)
     private var confirmCode: String = ""
     private var wrongCodeAttempts = 0
     @Volatile private var running = false
@@ -96,6 +97,7 @@ class PairingServer(private val scope: CoroutineScope) {
         val random = SecureRandom()
         token = ByteArray(24).also(random::nextBytes).joinToString("") { "%02x".format(it) }
         confirmCode = "%06d".format(random.nextInt(1_000_000))
+        lanKey = LanCrypto.newKey()
         wrongCodeAttempts = 0
 
         val socket = try {
@@ -112,7 +114,8 @@ class PairingServer(private val scope: CoroutineScope) {
         running = true
 
         val session = Session(
-            url = "http://$host:${socket.localPort}/?t=$token",
+            // The #k= fragment carries the encryption key to the phone; browsers never transmit it.
+            url = "http://$host:${socket.localPort}/?t=$token#k=${LanCrypto.hex(lanKey)}",
             confirmCode = confirmCode,
             host = host,
             port = socket.localPort,
@@ -208,7 +211,12 @@ class PairingServer(private val scope: CoroutineScope) {
     }
 
     private fun handleSubmit(output: java.io.OutputStream, body: String) {
-        val form = PairingHttp.parseFormEncoded(body)
+        val outer = PairingHttp.parseFormEncoded(body)
+        // Encrypted submissions (QR path) are opened with this session's key; a forged or
+        // tampered message fails authentication and counts as a wrong attempt.
+        val form = outer["enc"]?.let { enc ->
+            LanCrypto.open(enc, lanKey)?.let { PairingHttp.parseFormEncoded(it) } ?: mapOf("code" to "")
+        } ?: outer
 
         val code = form["code"].orEmpty().filter { it.isDigit() }
         if (!PairingHttp.secretsMatch(code, confirmCode)) {

@@ -71,7 +71,7 @@ class SyncEngine(private val graph: ServiceLocator.Graph) {
         // capture can't be opened from another box, so sharing its metadata would just create a
         // library row that fails to play everywhere but here.
         val recordings = graph.recordingRepository.all()
-            .filter { it.status == RecordingStatus.COMPLETED && SmbClient.isSmb(it.filePath) }
+            .filter { it.status == RecordingStatus.COMPLETED && (SmbClient.isSmb(it.filePath) || app.opentv.recording.CloudClient.isCloud(it.filePath)) }
             .map { r ->
                 SyncRecording(
                     channelName = r.channelName,
@@ -98,6 +98,15 @@ class SyncEngine(private val graph: ServiceLocator.Graph) {
             favouriteSeries = graph.catalogRepository.favouriteSeriesIds(),
             hiddenCategories = graph.settings.hiddenCategories.value.toList(),
             recordings = recordings,
+            favouriteLists = graph.database.favouriteLists().let { dao ->
+                dao.allLists().map { SyncFavouriteList(it.name, dao.streamUrlsOf(it.id).distinct()) }
+            },
+            channelNumbers = graph.database.channels().withCustomNumber()
+                .mapNotNull { c -> c.customNumber?.let { c.streamUrl to it } }.toMap(),
+            lockedChannels = graph.settings.lockedChannels.value.mapNotNull { key ->
+                val sourceId = key.substringBefore(':').toLongOrNull() ?: return@mapNotNull null
+                graph.database.channels().bySourceStream(sourceId, key.substringAfter(':'))?.streamUrl
+            },
         )
     }
 
@@ -151,7 +160,7 @@ class SyncEngine(private val graph: ServiceLocator.Graph) {
         // Never touch an existing row; a peer's copy and ours are the same file on the same NAS.
         var recordings = 0
         for (rec in bundle.recordings) {
-            if (!SmbClient.isSmb(rec.filePath)) continue
+            if (!SmbClient.isSmb(rec.filePath) && !app.opentv.recording.CloudClient.isCloud(rec.filePath)) continue
             if (graph.recordingRepository.byFilePath(rec.filePath) != null) continue
             val inserted = runCatching {
                 graph.recordingRepository.insert(
@@ -201,6 +210,37 @@ class SyncEngine(private val graph: ServiceLocator.Graph) {
                 )
                 positions++
             }
+        }
+        // Named favourites lists: matched by name, channels added (never removed) in peer order.
+        val channels = graph.database.channels()
+        val listDao = graph.database.favouriteLists()
+        val localLists = listDao.allLists()
+        for (peer in bundle.favouriteLists) {
+            val listId = localLists.firstOrNull { it.name.equals(peer.name, ignoreCase = true) }?.id
+                ?: listDao.insertList(
+                    app.opentv.data.model.FavouriteList(name = peer.name, sortIndex = listDao.nextListIndex(), createdAtMillis = System.currentTimeMillis()),
+                )
+            val have = listDao.streamUrlsOf(listId).toHashSet()
+            for (url in peer.streamUrls) {
+                if (url in have) continue
+                val c = channels.byStreamUrl(url) ?: continue
+                listDao.addEntry(app.opentv.data.model.FavouriteListEntry(listId, c.sourceId, c.streamId, listDao.nextEntryIndex(listId), System.currentTimeMillis()))
+                favourites++
+            }
+        }
+        // Own channel numbers: fill in where this device hasn't numbered the channel itself.
+        for ((url, number) in bundle.channelNumbers) {
+            val c = channels.byStreamUrl(url) ?: continue
+            if (c.customNumber == null) { channels.setCustomNumber(c.id, number); favourites++ }
+        }
+        // Parental locks: additive.
+        if (bundle.lockedChannels.isNotEmpty()) {
+            val keys = graph.settings.lockedChannels.value.toMutableSet()
+            for (url in bundle.lockedChannels) {
+                val c = channels.byStreamUrl(url) ?: continue
+                if (keys.add("${c.sourceId}:${c.streamId}")) hidden++
+            }
+            graph.settings.setLockedChannels(keys)
         }
         return MergeResult(
             positions = positions,

@@ -33,6 +33,11 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -69,6 +74,11 @@ fun SettingsHubScreen(
     onOpenSync: () -> Unit,
     onOpenRecordings: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenVpn: () -> Unit = {},
+    onOpenStorage: () -> Unit = {},
+    onOpenChannelOrder: () -> Unit = {},
+    onOpenPhoneRemote: () -> Unit = {},
+    onOpenBackup: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     val entries = listOf(
@@ -80,6 +90,11 @@ fun SettingsHubScreen(
         HubEntry(Icons.Filled.Tune, stringResource(R.string.settings_display_title), stringResource(R.string.settings_display_subtitle), onOpenDisplay),
         HubEntry(Icons.Filled.Storage, stringResource(R.string.settings_recording_title), stringResource(R.string.settings_recording_subtitle), onOpenRecordings),
         HubEntry(Icons.Filled.Lock, stringResource(R.string.settings_parental_title), stringResource(R.string.settings_parental_subtitle), onOpenParental),
+        HubEntry(Icons.Filled.Backup, stringResource(R.string.backup_title), stringResource(R.string.backup_hub_subtitle), onOpenBackup),
+        HubEntry(Icons.Filled.SettingsRemote, stringResource(R.string.remote_title), stringResource(R.string.remote_hub_subtitle), onOpenPhoneRemote),
+        HubEntry(Icons.Filled.FormatListNumbered, stringResource(R.string.order_title), stringResource(R.string.order_hub_subtitle), onOpenChannelOrder),
+        HubEntry(Icons.Filled.CloudSync, stringResource(R.string.store_title), stringResource(R.string.store_hub_subtitle), onOpenStorage),
+        HubEntry(Icons.Filled.VpnKey, stringResource(R.string.vpn_title), stringResource(R.string.vpn_hub_subtitle), onOpenVpn),
         HubEntry(Icons.Filled.Sync, stringResource(R.string.settings_sync_title), stringResource(R.string.settings_sync_subtitle), onOpenSync),
         HubEntry(Icons.Filled.Info, stringResource(R.string.settings_about_title), stringResource(R.string.settings_about_subtitle), onOpenAbout),
     )

@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
@@ -175,6 +176,8 @@ fun PlayerScreen(
     // Digits typed on the remote accumulate here, then jump to that channel number after a beat.
     var numberEntry by remember { mutableStateOf("") }
     var paused by remember { mutableStateOf(false) }
+    // Stream diagnosis panel (Info key, phone remote ⓘ, or the bar's "Diagnose" chip).
+    var showDiagnostics by remember { mutableStateOf(false) }
     var resizeMode by remember { mutableIntStateOf(settings.playerResizeMode.value) }
 
     var controlsVisible by remember { mutableStateOf(true) }
@@ -363,6 +366,8 @@ fun PlayerScreen(
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val digit = keyToDigit(event.key)
                 when {
+                    // Back first closes the diagnosis panel; otherwise it must reach the back handler.
+                    showDiagnostics && (event.key == Key.Back || event.key == Key.Escape) -> { showDiagnostics = false; true }
                     // Never swallow Back/Escape — they must reach the back handler.
                     event.key == Key.Back || event.key == Key.Escape -> false
                     // Typing a channel number jumps to it, TiviMate-style.
@@ -370,6 +375,14 @@ fun PlayerScreen(
                         numberEntry = (numberEntry + digit).take(4)
                         reveal(); interaction++; true
                     }
+                    // Media keys — from a real remote or the phone remote.
+                    event.key == Key.MediaPlayPause || event.key == Key.MediaPlay || event.key == Key.MediaPause -> {
+                        paused = !paused
+                        controller.player.playWhenReady = !paused
+                        reveal(); true
+                    }
+                    event.key == Key.MediaStop -> { onBack(); true }
+                    event.key == Key.Info -> { showDiagnostics = !showDiagnostics; true }
                     // A picker or the channel list owns the whole d-pad while it's up.
                     channelListVisible || panel != Panel.NONE -> {
                         interaction++
@@ -547,6 +560,10 @@ fun PlayerScreen(
                     }
 
                     Spacer(Modifier.width(20.dp))
+                    BarChip(Icons.Filled.Info, stringResource(R.string.diag_chip), showDiagnostics) {
+                        showDiagnostics = !showDiagnostics; interaction++
+                    }
+                    Spacer(Modifier.width(10.dp))
                     BarChip(Icons.Filled.Subtitles, stringResource(R.string.player_subtitles), panel == Panel.SUBTITLES) {
                         panel = if (panel == Panel.SUBTITLES) Panel.NONE else Panel.SUBTITLES; interaction++
                     }
@@ -581,6 +598,16 @@ fun PlayerScreen(
                     }
                 }
             }
+        }
+
+        // Stream diagnosis, top right over the picture.
+        AnimatedVisibility(
+            visible = showDiagnostics && !inPip,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopEnd).padding(24.dp),
+        ) {
+            DiagnosticsPanel(controller.diagnostics)
         }
 
         // Left-side transparent channel list — d-pad Left opens it, pick a channel to switch.

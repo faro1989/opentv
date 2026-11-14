@@ -90,6 +90,11 @@ class RecordingService : Service() {
             repo.markStarted(id, System.currentTimeMillis())
             // Announce the live capture so the player can watch this file while it grows.
             RecordingLiveState.markActive(id, recording.filePath)
+            if (app.opentv.vpn.VpnController.get(applicationContext).isBlocked()) {
+                throw IllegalStateException(getString(R.string.vpn_kill_blocked))
+            }
+            // Make room first if the user enabled "clean up old recordings" and space is low.
+            runCatching { StorageManager.cleanupIfNeeded(applicationContext) }
             sink = RecordingStorage.openSink(applicationContext, graph.settings, recording.filePath)
             // A USB (SAF) sink only learns its real content:// URI when the document is created —
             // persist it onto the row so the finished recording plays back and deletes correctly.
@@ -180,6 +185,11 @@ class RecordingService : Service() {
                     bytes = total,
                     error = if (ok) null else (error ?: getString(R.string.rec_error_nothing)),
                 )
+            }
+            // A cloud recording was captured to the local staging folder — hand it to the uploader,
+            // which waits for network, retries, and repoints the row at the cloud copy when done.
+            if (ok && RecordingStorage.isCloudStaged(applicationContext, recording.filePath)) {
+                runCatching { CloudUploadWorker.enqueue(applicationContext, id) }
             }
             finish(id)
         }
