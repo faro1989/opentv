@@ -5,6 +5,7 @@
  */
 package app.opentv.vpn
 
+import app.opentv.core.SecretStore
 import android.content.Context
 import android.net.VpnService
 import com.wireguard.android.backend.GoBackend
@@ -71,11 +72,11 @@ class VpnController private constructor(context: Context) {
         _profile.value = profile
         prefs.edit()
             .putString("provider", profile.provider)
-            .also { app.opentv.core.SecretStore.put(it, "privateKey", profile.privateKey) }
+            .also { SecretStore.put(it, "privateKey", profile.privateKey) }
             .putString("address", profile.address)
             .putString("dns", profile.dns)
             .putString("publicKey", profile.publicKey)
-            .also { app.opentv.core.SecretStore.put(it, "presharedKey", profile.presharedKey) }
+            .also { SecretStore.put(it, "presharedKey", profile.presharedKey) }
             .putString("endpoint", profile.endpoint)
             .putString("allowedIps", profile.allowedIps)
             .putBoolean("onlyThisApp", profile.onlyThisApp)
@@ -86,11 +87,11 @@ class VpnController private constructor(context: Context) {
 
     private fun read() = VpnProfile(
         provider = prefs.getString("provider", "mullvad") ?: "mullvad",
-        privateKey = app.opentv.core.SecretStore.get(prefs, "privateKey"),
+        privateKey = SecretStore.get(prefs, "privateKey"),
         address = prefs.getString("address", "") ?: "",
         dns = prefs.getString("dns", "") ?: "",
         publicKey = prefs.getString("publicKey", "") ?: "",
-        presharedKey = app.opentv.core.SecretStore.get(prefs, "presharedKey"),
+        presharedKey = SecretStore.get(prefs, "presharedKey"),
         endpoint = prefs.getString("endpoint", "") ?: "",
         allowedIps = prefs.getString("allowedIps", DEFAULT_ALLOWED) ?: DEFAULT_ALLOWED,
         onlyThisApp = prefs.getBoolean("onlyThisApp", true),
