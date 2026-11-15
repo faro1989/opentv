@@ -6,6 +6,7 @@
 package app.opentv.ui.channels
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -178,7 +179,7 @@ internal fun ListNameDialog(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             Modifier
-                .width(640.dp)
+                .widthIn(max = 640.dp).fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(20.dp),
@@ -220,7 +221,7 @@ private fun ListDialogFrame(onDismiss: () -> Unit, content: @Composable () -> Un
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
-                .width(480.dp)
+                .widthIn(max = 480.dp).fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(20.dp),

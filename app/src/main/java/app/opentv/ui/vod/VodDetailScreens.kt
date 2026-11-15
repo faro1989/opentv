@@ -6,6 +6,7 @@
 package app.opentv.ui.vod
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -186,7 +187,7 @@ private fun AddonStreamPicker(
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
-                .width(560.dp)
+                .widthIn(max = 560.dp).fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(20.dp),

@@ -315,12 +315,16 @@ fun HomeScreen(
         )
     }
 
+    // Phones: no side rail (it would eat half the screen) — the same entries become a swipeable
+    // chip bar above the list, and the preview turns into a full-width 16:9 video.
+    val compact = !isTelevision && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
+
     Row(Modifier.fillMaxSize()) {
 
         // ---- Category rail -----------------------------------------------------------------
         // Width animates to 0 while focus is in the guide (see onFocusRow) so the grid gets the
         // whole screen; d-pad LEFT from the guide's channel column slides it back (onExitLeft…).
-        Column(
+        if (!compact) Column(
             Modifier
                 .width(railWidth)
                 .fillMaxHeight()
@@ -424,6 +428,38 @@ fun HomeScreen(
 
         // ---- Preview + guide ---------------------------------------------------------------
         Column(Modifier.weight(1f)) {
+            if (compact) {
+                androidx.compose.foundation.lazy.LazyRow(
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (sources.size > 1) {
+                        item(key = "c-src-all") {
+                            CompactChip(stringResource(R.string.channels_manager_all_sources), selectedSource == null) { viewModel.selectSource(null) }
+                        }
+                        items(sources, key = { "c-src-${it.id}" }) { source ->
+                            CompactChip(source.name, selectedSource == source.id) { viewModel.selectSource(source.id) }
+                        }
+                    }
+                    item(key = "c-fav") { CompactChip(stringResource(R.string.guide_favourites), favouritesOnly, viewModel::selectFavourites) }
+                    items(favouriteLists, key = { "c-favlist-${it.id}" }) { list ->
+                        CompactChip("☆ " + list.name, selectedListId == list.id) { viewModel.selectList(list.id) }
+                    }
+                    item(key = "c-all") {
+                        CompactChip(
+                            stringResource(R.string.guide_all_channels),
+                            !favouritesOnly && selectedListId == null && selectedCategory == null,
+                        ) { viewModel.selectCategory(null) }
+                    }
+                    items(categories, key = { "c-" + it.key }) { group ->
+                        CompactChip(group.label, !favouritesOnly && selectedListId == null && selectedCategory == group.key) {
+                            viewModel.selectCategory(group.key)
+                        }
+                    }
+                    item(key = "c-manage") { CompactChip(stringResource(R.string.favlist_manage_rail), false) { showManageLists = true } }
+                    item(key = "c-order") { CompactChip("⇅ " + stringResource(R.string.order_title), false, onOpenChannelOrder) }
+                }
+            }
             if (rows.isEmpty()) {
                 when {
                     favouritesOnly -> NoFavouritesState()
@@ -482,6 +518,7 @@ fun HomeScreen(
                     onPrevDay = { viewModel.nudgeGuideDay(-1) },
                     onNextDay = { viewModel.nudgeGuideDay(1) },
                     stats = previewStats,
+                    compact = compact,
                 )
                 // Shared by both layouts: focus follows the highlight and collapses the rail; LEFT
                 // from the leftmost element reopens the rail (consumed only when it was hidden).
@@ -511,7 +548,7 @@ fun HomeScreen(
                         onStartMove = viewModel::startMove,
                         onMoveStep = { row, delta -> viewModel.moveInList(row, delta) },
                         onEndMove = viewModel::endMove,
-                        modifier = Modifier.weight(1f).padding(start = 12.dp, end = 12.dp),
+                        modifier = Modifier.weight(1f).padding(start = if (compact) 6.dp else 12.dp, end = if (compact) 6.dp else 12.dp),
                     )
                 } else {
                     GuideGrid(
@@ -556,7 +593,7 @@ fun HomeScreen(
         Dialog(onDismissRequest = { recordTarget = null }) {
             Column(
                 Modifier
-                    .width(440.dp)
+                    .widthIn(max = 440.dp).fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(24.dp),
@@ -710,7 +747,7 @@ fun HomeScreen(
         Dialog(onDismissRequest = { pendingLiveChannel = null }) {
             Column(
                 Modifier
-                    .width(480.dp)
+                    .widthIn(max = 480.dp).fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(20.dp),
@@ -748,7 +785,7 @@ fun HomeScreen(
         Dialog(onDismissRequest = { channelMenu = null }) {
             Column(
                 Modifier
-                    .width(480.dp)
+                    .widthIn(max = 480.dp).fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(20.dp),
@@ -1296,3 +1333,19 @@ private fun EmptyState(onAddSource: () -> Unit) {
 private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
 private fun formatTime(utcMillis: Long): String = timeFormat.format(Date(utcMillis))
+
+/** One entry of the phone's swipeable category bar: a pill, cyan when selected. */
+@Composable
+private fun CompactChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        style = MaterialTheme.typography.labelLarge,
+        maxLines = 1,
+        color = if (selected) app.opentv.ui.theme.Obsidian.Canvas else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selected) app.opentv.ui.theme.Obsidian.Cyan else MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    )
+}

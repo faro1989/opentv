@@ -6,6 +6,7 @@
 package app.opentv.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,7 +59,7 @@ fun DiagnosticsPanel(diagnostics: StreamDiagnostics, modifier: Modifier = Modifi
 
     Column(
         modifier
-            .width(460.dp)
+            .widthIn(max = 460.dp).fillMaxWidth()
             .clip(shape)
             .background(Obsidian.Canvas.copy(alpha = 0.92f))
             .border(1.dp, Obsidian.CyanGlow, shape)

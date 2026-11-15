@@ -95,14 +95,16 @@ fun GuidePreview(
     onNextDay: () -> Unit = {},
     /** Live measurements of the preview stream, when it plays — fills the Bitrate/Server tiles. */
     stats: app.opentv.player.StreamDiagnostics.Snapshot? = null,
+    /** Phone: a full-width 16:9 video only, without the side detail column. */
+    compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(18.dp)
     Row(
         modifier
             .fillMaxWidth()
-            .height(250.dp)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .then(if (compact) Modifier else Modifier.height(250.dp))
+            .padding(horizontal = if (compact) 10.dp else 16.dp, vertical = if (compact) 6.dp else 12.dp)
             .clip(shape)
             .background(Brush.horizontalGradient(listOf(Obsidian.Surface, Obsidian.Canvas)))
             .border(1.dp, Obsidian.Hairline, shape)
@@ -111,7 +113,7 @@ fun GuidePreview(
         // ---- Video card ---------------------------------------------------------------------
         Box(
             Modifier
-                .fillMaxHeight()
+                .then(if (compact) Modifier.fillMaxWidth() else Modifier.fillMaxHeight())
                 .aspectRatio(16f / 9f)
                 .clip(RoundedCornerShape(14.dp))
                 .background(Color.Black)
@@ -199,6 +201,7 @@ fun GuidePreview(
             }
         }
 
+        if (!compact) {
         Spacer(Modifier.width(20.dp))
 
         // ---- Now / next detail ------------------------------------------------------------
@@ -347,6 +350,7 @@ fun GuidePreview(
                     Modifier.weight(1f),
                 )
             }
+        }
         }
     }
 }

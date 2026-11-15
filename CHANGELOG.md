@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.3
+
+- Phone layout: swipeable category bar instead of the side rail, full-width preview, top bar with search, recordings and profile, dialogs fit the screen
+
 ## 0.12.2
 
 - Movies and series for M3U links from Xtream panels (get.php); their VOD entries no longer flood the channel list

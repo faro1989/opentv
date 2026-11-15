@@ -623,7 +623,7 @@ fun PlayerScreen(
             Column(
                 Modifier
                     .fillMaxHeight()
-                    .width(380.dp)
+                    .widthIn(max = 380.dp).fillMaxWidth()
                     .background(Color.Black.copy(alpha = 0.72f))
                     .padding(vertical = 16.dp),
             ) {

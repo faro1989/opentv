@@ -6,6 +6,7 @@
 package app.opentv.ui
 
 import android.content.Context
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -64,7 +65,7 @@ fun RecordingBackgroundDialog(onAllow: () -> Unit, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
-                .width(460.dp)
+                .widthIn(max = 460.dp).fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(24.dp),

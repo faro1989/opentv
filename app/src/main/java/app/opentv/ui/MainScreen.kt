@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -171,6 +172,39 @@ fun MainScreen(
     val phoneLayout = !isTelevision && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
     val channelsVm: app.opentv.ui.ChannelsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     Column(Modifier.fillMaxSize()) {
+      // Phones have no rail, so its extras (search, recordings, profile) sit in a slim top bar.
+      if (phoneLayout) {
+          Row(
+              Modifier
+                  .fillMaxWidth()
+                  .background(app.opentv.ui.theme.Obsidian.Canvas)
+                  .statusBarsPadding()
+                  .padding(start = 16.dp, end = 4.dp)
+                  .height(48.dp),
+              verticalAlignment = Alignment.CenterVertically,
+          ) {
+              Text(
+                  stringResource(tab.labelRes),
+                  style = MaterialTheme.typography.titleLarge,
+                  modifier = Modifier.weight(1f),
+              )
+              androidx.compose.material3.IconButton(onClick = onOpenSearch) {
+                  Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.nav_search))
+              }
+              if (Tab.RECORDINGS in visibleTabs) {
+                  androidx.compose.material3.IconButton(onClick = { tab = Tab.RECORDINGS }) {
+                      Icon(
+                          Icons.Filled.FiberManualRecord,
+                          contentDescription = stringResource(R.string.nav_recordings),
+                          tint = if (tab == Tab.RECORDINGS) app.opentv.ui.theme.Obsidian.Magenta else app.opentv.ui.theme.Obsidian.TextMid,
+                      )
+                  }
+              }
+              androidx.compose.material3.IconButton(onClick = onOpenProfiles) {
+                  Icon(Icons.Filled.Person, contentDescription = activeProfileName)
+              }
+          }
+      }
       Row(Modifier.weight(1f).fillMaxWidth()) {
         if (!phoneLayout) NavRail(
             tabs = visibleTabs,
