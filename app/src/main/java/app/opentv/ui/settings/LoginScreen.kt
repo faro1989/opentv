@@ -94,36 +94,13 @@ fun LoginScreen(
                 accounts.forEach { acc ->
                     AccountCard(acc, autoFocus = acc == accounts.first()) { onPickAccount(acc); onSignedIn() }
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    stringResource(R.string.login_or_manual),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
             Spacer(Modifier.height(4.dp))
-            OutlinedTextField(
-                value = user,
-                onValueChange = { user = it; error = false },
-                label = { Text(stringResource(R.string.login_user)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            // One tap signs in with the saved account — no typing.
+            Button(
+                onClick = { accounts.firstOrNull()?.let { onPickAccount(it); onSignedIn() } },
                 modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = pass,
-                onValueChange = { pass = it; error = false },
-                label = { Text(stringResource(R.string.login_password)) },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { submit() }),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (error) {
-                Text(stringResource(R.string.login_wrong), color = Obsidian.Magenta, style = MaterialTheme.typography.bodyMedium)
-            }
-            Button(onClick = { submit() }, modifier = Modifier.fillMaxWidth()) {
+            ) {
                 Text(stringResource(R.string.login_button))
             }
         }

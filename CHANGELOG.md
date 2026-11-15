@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.2
+
+- Sign-in after log out: saved account only, no username/password fields
+
 ## 0.17.1
 
 - Sign-in after log out lists the saved accounts (login data kept) — one tap signs back in

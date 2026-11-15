@@ -730,7 +730,7 @@
     <string name="logout_subtitle">App sperren, bis du dich wieder anmeldest – nichts wird gelöscht</string>
     <string name="logout_body">Zum erneuten Anmelden brauchst du Benutzername und Passwort deines Anbieters. Sender, Favoriten, Aufnahmen und Einstellungen bleiben alle erhalten.</string>
     <string name="logout_confirm">Abmelden</string>
-    <string name="login_body">Du bist abgemeldet. Wähle dein gespeichertes Konto – deine Anmeldedaten sind noch gespeichert – oder melde dich von Hand an.</string>
+    <string name="login_body">Du bist abgemeldet. Deine Anmeldedaten sind noch gespeichert – wähle einfach dein Konto.</string>
     <string name="login_user">Benutzername (oder MAC-Adresse)</string>
     <string name="login_password">Passwort</string>
     <string name="login_wrong">Benutzername oder Passwort passen zu keinem gespeicherten Anbieter.</string>
