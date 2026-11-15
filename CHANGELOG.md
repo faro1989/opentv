@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.1
+
+- Sign-in after log out lists the saved accounts (login data kept) — one tap signs back in
+
 ## 0.17.0
 
 - Log out: Settings → Log out locks the app behind a sign-in screen (provider username and password); nothing is deleted

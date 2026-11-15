@@ -348,6 +348,8 @@ private fun OpenTvApp(isTelevision: Boolean) {
             composable(Routes.LOGIN) {
                 app.opentv.ui.settings.LoginScreen(
                     onSignIn = { u, p -> sourcesViewModel.signIn(u, p) },
+                    accounts = sourcesUi.sources,
+                    onPickAccount = { sourcesViewModel.signInWith(it) },
                     onSignedIn = {
                         navController.navigate(Routes.HOME) {
                             popUpTo(0) { inclusive = true }

@@ -180,6 +180,11 @@ class SourcesViewModel(app: Application) : AndroidViewModel(app) {
         onDone()
     }
 
+    /** Sign in again with a saved account — its login data were kept, so one tap is enough. */
+    fun signInWith(@Suppress("UNUSED_PARAMETER") source: Source) {
+        app.opentv.core.Session.logIn(getApplication())
+    }
+
     /** Sign in again: true when the login matches one of the saved provider accounts. */
     fun signIn(username: String, password: String): Boolean {
         val ok = app.opentv.core.Session.matches(ui.value.sources, username, password)

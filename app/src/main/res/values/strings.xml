@@ -796,9 +796,11 @@
     <string name="logout_subtitle">Lock the app until you sign in again — nothing is deleted</string>
     <string name="logout_body">You will need your provider username and password to sign in again. Channels, favourites, recordings and settings all stay.</string>
     <string name="logout_confirm">Log out</string>
-    <string name="login_body">You are logged out. Sign in with your provider username and password — all your channels, lists and settings are still here.</string>
+    <string name="login_body">You are logged out. Pick your saved account — your login data are still stored — or sign in by hand.</string>
     <string name="login_user">Username (or MAC address)</string>
     <string name="login_password">Password</string>
     <string name="login_wrong">Username or password does not match a saved provider.</string>
     <string name="login_button">Sign in</string>
+    <string name="login_saved">Your saved accounts</string>
+    <string name="login_or_manual">or sign in by hand:</string>
 </resources>
