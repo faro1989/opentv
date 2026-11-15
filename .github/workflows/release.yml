@@ -51,12 +51,39 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
           echo "KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
 
+      # StreamFlow's permanent key lives encrypted in signing/; the SIGNING_PASSPHRASE secret
+      # unlocks it. One fixed key is what lets each new APK install as an update.
+      - name: Unlock StreamFlow signing key
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+        if: env.SIGNING_PASSPHRASE != ''
+        run: |
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in signing/streamflow.jks.enc \
+            -out "$RUNNER_TEMP/streamflow.jks" -pass env:SIGNING_PASSPHRASE
+          {
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/streamflow.jks"
+            echo "KEY_ALIAS=streamflow"
+          } >> "$GITHUB_ENV"
+
+      - name: Refuse to publish with a throw-away key
+        if: env.KEYSTORE_PATH == ''
+        run: |
+          echo "::error::No signing key: add the SIGNING_PASSPHRASE secret (Settings → Secrets and variables → Actions)."
+          exit 1
+
       - name: Assemble release APK
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          KEYSTORE_PASSWORD_SECRET: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS_SECRET: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD_SECRET: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$SIGNING_PASSPHRASE" ]; then
+            export KEYSTORE_PASSWORD="$SIGNING_PASSPHRASE" KEY_PASSWORD="$SIGNING_PASSPHRASE"
+          else
+            export KEYSTORE_PASSWORD="$KEYSTORE_PASSWORD_SECRET" KEY_PASSWORD="$KEY_PASSWORD_SECRET" KEY_ALIAS="$KEY_ALIAS_SECRET"
+          fi
+          ./gradlew assembleRelease
 
       # A stable asset name matters: the install page and the /apk short link both look for
       # a file ending in .apk, and a predictable name keeps direct links working.

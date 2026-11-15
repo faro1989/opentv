@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.2
+
+- Signed with StreamFlow's permanent key, so every later version installs as an update
+
 ## 0.13.1
 
 - Always-on mode: keeps running while the TV is off, returns to the screen on power-on, starts after a reboot and reopens after a crash; only Exit closes it
