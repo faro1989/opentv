@@ -241,6 +241,7 @@ object Routes {
 
     // VOD plays carry the stream inline; a movie/episode is a one-off URL, not a stored id
     // the player can look up the way a channel is.
+    const val LOGIN = "login"
     const val VOD_PLAYER = "vod?key={key}&url={url}&title={title}&ua={ua}"
 
     fun player(channelId: Long) = "player/$channelId"
@@ -278,7 +279,14 @@ private fun OpenTvApp(isTelevision: Boolean) {
 
     // First run goes straight to setup — an empty channel list with no explanation is the
     // worst possible first impression.
-    val start = if (sourcesUi.sources.isEmpty()) Routes.ADD_SOURCE else Routes.HOME
+    // After "Log out" (nothing deleted) the app opens on the sign-in screen until the user signs in.
+    val sessionContext = androidx.compose.ui.platform.LocalContext.current
+    val loggedOut = remember { app.opentv.core.Session.isLoggedOut(sessionContext) }
+    val start = when {
+        sourcesUi.sources.isEmpty() -> Routes.ADD_SOURCE
+        loggedOut -> Routes.LOGIN
+        else -> Routes.HOME
+    }
 
     // Boot to last channel: if enabled and we have one, jump straight into the player on launch.
     // Runs once; backing out returns to the guide and doesn't re-trigger.
@@ -295,6 +303,8 @@ private fun OpenTvApp(isTelevision: Boolean) {
     val playRequest by app.opentv.core.PlayRequests.channelId.collectAsState()
     LaunchedEffect(playRequest) {
         val id = playRequest
+        // Logged out: no reminder or remote may open a channel past the sign-in screen.
+        if (app.opentv.core.Session.isLoggedOut(bootContext)) return@LaunchedEffect
         if (id != null && id != 0L) {
             app.opentv.core.PlayRequests.consume()
             navController.navigate(Routes.player(id))
@@ -306,6 +316,7 @@ private fun OpenTvApp(isTelevision: Boolean) {
     val watchRequest by app.opentv.core.RecordingSignals.watch.collectAsState()
     LaunchedEffect(watchRequest) {
         val req = watchRequest ?: return@LaunchedEffect
+        if (app.opentv.core.Session.isLoggedOut(bootContext)) return@LaunchedEffect
         app.opentv.core.RecordingSignals.consumeWatch()
         val fresh = System.currentTimeMillis() - req.requestedAtMillis < 10 * 60_000L
         if (req.recordingId != 0L && fresh) {
@@ -334,6 +345,18 @@ private fun OpenTvApp(isTelevision: Boolean) {
 
     Box(Modifier.fillMaxSize()) {
         NavHost(navController = navController, startDestination = start) {
+            composable(Routes.LOGIN) {
+                app.opentv.ui.settings.LoginScreen(
+                    onSignIn = { u, p -> sourcesViewModel.signIn(u, p) },
+                    onSignedIn = {
+                        navController.navigate(Routes.HOME) {
+                            popUpTo(0) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                )
+            }
+
             composable(Routes.ADD_SOURCE) {
                 AddSourceScreen(
                     viewModel = sourcesViewModel,
@@ -458,7 +481,7 @@ private fun OpenTvApp(isTelevision: Boolean) {
                         onOpenBackup = { navController.navigate(Routes.BACKUP) },
                         onLogout = {
                             sourcesViewModel.logout {
-                                navController.navigate(Routes.ADD_SOURCE) {
+                                navController.navigate(Routes.LOGIN) {
                                     popUpTo(0) { inclusive = true }
                                     launchSingleTop = true
                                 }

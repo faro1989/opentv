@@ -2,7 +2,7 @@
 
 ## 0.17.0
 
-- Log out: Settings → Log out removes the provider login(s) and returns to sign-in
+- Log out: Settings → Log out locks the app behind a sign-in screen (provider username and password); nothing is deleted
 
 ## 0.16.1
 

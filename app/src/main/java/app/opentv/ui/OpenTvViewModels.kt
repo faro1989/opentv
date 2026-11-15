@@ -172,15 +172,19 @@ class SourcesViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Log out: remove every provider account (and with it its channels, movies, series and stored
-     * login), forget the last channel, then hand back to the sign-in screen.
+     * Log out WITHOUT deleting anything: providers, favourites, recordings and settings all stay.
+     * The app is only locked until the user signs in again with their provider login.
      */
     fun logout(onDone: () -> Unit) {
-        viewModelScope.launch {
-            ui.value.sources.forEach { runCatching { graph.catalogRepository.deleteSource(it.id) } }
-            runCatching { graph.settings.lastChannelId = 0L }
-            onDone()
-        }
+        app.opentv.core.Session.logOut(getApplication())
+        onDone()
+    }
+
+    /** Sign in again: true when the login matches one of the saved provider accounts. */
+    fun signIn(username: String, password: String): Boolean {
+        val ok = app.opentv.core.Session.matches(ui.value.sources, username, password)
+        if (ok) app.opentv.core.Session.logIn(getApplication())
+        return ok
     }
 
     /**
