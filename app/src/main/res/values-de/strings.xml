@@ -712,4 +712,10 @@
     <string name="keepalive_subtitle">Zapora läuft weiter, wenn der Fernseher aus ist, und ist beim Einschalten sofort wieder da. Nur „Beenden“ schließt die App.</string>
     <string name="keepalive_channel">Dauerbetrieb</string>
     <string name="keepalive_running">Zapora bleibt im Hintergrund bereit</string>
+    <string name="search_go">Suchen</string>
+    <string name="search_record">Aufnehmen</string>
+    <string name="search_record_stop">Aufnahme stoppen</string>
+    <string name="search_rec_started">Aufnahme gestartet</string>
+    <string name="search_rec_stopped">Aufnahme gestoppt</string>
+    <string name="search_field_hint">Sender, Filme oder Serien …</string>
 </resources>

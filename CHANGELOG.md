@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.2
+
+- Search: phones get a real search field with the keyboard's search key; TV keyboard gets a Search key; record or stop straight from a channel result
+
 ## 0.15.1
 
 - Fix crash during playback: player buffer memory is capped to the device's heap (live pause kept up to ~130 MB of video in memory); large heap enabled

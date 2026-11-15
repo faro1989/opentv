@@ -51,6 +51,8 @@ internal fun OnScreenKeyboard(
     onSpace: () -> Unit,
     onBackspace: () -> Unit,
     onClear: () -> Unit,
+    /** Optional "Search" key: confirms the entry (TV: jumps to the results). */
+    onSearch: (() -> Unit)? = null,
 ) {
     val keyRows = listOf("1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM")
     val firstKey = remember { FocusRequester() }
@@ -84,6 +86,11 @@ internal fun OnScreenKeyboard(
             KeyCap(label = stringResource(R.string.kbd_del), icon = true, wide = 2, onClick = onBackspace)
             KeyCap(label = stringResource(R.string.kbd_clear), wide = 2, onClick = onClear)
         }
+        if (onSearch != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                KeyCap(label = "🔍  " + stringResource(R.string.search_go), wide = 9, accent = true, onClick = onSearch)
+            }
+        }
     }
 
     LaunchedEffect(Unit) { runCatching { firstKey.requestFocus() } }
@@ -96,10 +103,11 @@ private fun KeyCap(
     wide: Int = 1,
     icon: Boolean = false,
     focusRequester: FocusRequester? = null,
+    accent: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val bg = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val bg = if (focused || accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (focused || accent) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Box(
         Modifier
             .height(48.dp)

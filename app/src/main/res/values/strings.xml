@@ -779,4 +779,10 @@
     <string name="keepalive_subtitle">Zapora keeps running when the TV is off and is back on screen when you switch it on. Only \"Exit\" closes it.</string>
     <string name="keepalive_channel">Always-on mode</string>
     <string name="keepalive_running">Zapora stays ready in the background</string>
+    <string name="search_go">Search</string>
+    <string name="search_record">Record</string>
+    <string name="search_record_stop">Stop recording</string>
+    <string name="search_rec_started">Recording started</string>
+    <string name="search_rec_stopped">Recording stopped</string>
+    <string name="search_field_hint">Channels, movies or series …</string>
 </resources>

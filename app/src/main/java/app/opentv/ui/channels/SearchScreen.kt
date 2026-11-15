@@ -5,6 +5,10 @@
  */
 package app.opentv.ui.channels
 
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -88,6 +92,102 @@ fun SearchScreen(
     }
     BackHandler { onBack() }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val isTv = remember { app.opentv.isRunningOnTelevision(context) }
+    val graph = remember { app.opentv.core.ServiceLocator.get(context) }
+    val activeRecordings by graph.recordingRepository.observeActive().collectAsState(initial = emptyList())
+    val recordScope = androidx.compose.runtime.rememberCoroutineScope()
+    val resultsFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+
+    // Record now / stop, right from a search result.
+    val onRecord: (ChannelsViewModel.Row) -> Unit = { row ->
+        val active = activeRecordings.firstOrNull { it.channelId == row.primary.id }
+        if (active != null) {
+            graph.recordingEngine.stop(active.id)
+            android.widget.Toast.makeText(context, context.getString(R.string.search_rec_stopped), android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            recordScope.launch { runCatching { graph.recordingEngine.startChannel(row.primary, row.now) } }
+            android.widget.Toast.makeText(context, context.getString(R.string.search_rec_started) + ": " + row.primary.shownName, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val results: @Composable (Modifier) -> Unit = { mod ->
+        Column(mod) {
+            when {
+                query.isBlank() -> Hint(stringResource(R.string.search_start_hint))
+                query.trim().length < 2 -> Hint(stringResource(R.string.common_keep_typing))
+                !anyResults -> Hint(stringResource(R.string.search_no_results, query))
+                else -> LazyColumn(
+                    Modifier.focusRequester(resultsFocus),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (channelResults.isNotEmpty()) {
+                        item { SectionHeader(stringResource(R.string.common_channels) + "  ·  ${channelResults.size}") }
+                        items(channelResults, key = { "c${it.key}" }) { row ->
+                            SearchResultRow(
+                                row = row,
+                                recording = activeRecordings.any { it.channelId == row.primary.id },
+                                onClick = { onPlayChannel(row.primary) },
+                                onRecord = { onRecord(row) },
+                            )
+                        }
+                    }
+                    if (movieResults.isNotEmpty()) {
+                        item { SectionHeader(stringResource(R.string.nav_movies) + "  ·  ${movieResults.size}") }
+                        items(movieResults, key = { "m${it.id}" }) { movie ->
+                            VodResultRow(movie.displayTitle, movie.posterUrl, movie.year?.toString()) { onPlayMovie(movie) }
+                        }
+                    }
+                    if (seriesResults.isNotEmpty()) {
+                        item { SectionHeader(stringResource(R.string.nav_shows) + "  ·  ${seriesResults.size}") }
+                        items(seriesResults, key = { "s${it.id}" }) { show ->
+                            VodResultRow(show.displayTitle, show.posterUrl, show.year?.toString()) { onOpenSeries(show) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (!isTv) {
+        // Phone / tablet: a normal search field with the system keyboard and its search key.
+        val fieldFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+        LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
+        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it.take(60) },
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.search_field_hint)) },
+                    leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            androidx.compose.material3.IconButton(onClick = { query = "" }) {
+                                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Close, contentDescription = stringResource(R.string.kbd_clear))
+                            }
+                        }
+                    },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = {
+                        viewModel.setSearchQuery(query)
+                        vodViewModel.setVodSearchQuery(query)
+                        keyboard?.hide()
+                    }),
+                    shape = RoundedCornerShape(28.dp),
+                    modifier = Modifier.weight(1f).focusRequester(fieldFocus),
+                )
+                Spacer(Modifier.width(8.dp))
+                androidx.compose.material3.TextButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
+            }
+            Spacer(Modifier.height(12.dp))
+            results(Modifier.weight(1f).fillMaxWidth())
+        }
+        return
+    }
+
+    // TV: the remote-friendly on-screen keyboard on the left, results on the right.
     Column(
         Modifier
             .fillMaxSize()
@@ -96,13 +196,24 @@ fun SearchScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.nav_search), style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.width(20.dp))
-            Text(
-                query.ifEmpty { stringResource(R.string.search_type_name) },
-                style = MaterialTheme.typography.titleLarge,
-                color = if (query.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant
-                else MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.weight(1f))
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), RoundedCornerShape(28.dp))
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+            ) {
+                Text(
+                    "🔍  " + query.ifEmpty { stringResource(R.string.search_type_name) },
+                    style = MaterialTheme.typography.titleLarge,
+                    color = if (query.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(20.dp))
             OutlinedButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
         }
 
@@ -114,41 +225,16 @@ fun SearchScreen(
                 onSpace = { if (query.length < 40) query += " " },
                 onBackspace = { query = query.dropLast(1) },
                 onClear = { query = "" },
+                onSearch = {
+                    viewModel.setSearchQuery(query)
+                    vodViewModel.setVodSearchQuery(query)
+                    if (anyResults) runCatching { resultsFocus.requestFocus() }
+                },
             )
 
             Spacer(Modifier.width(28.dp))
 
-            Column(Modifier.weight(1f).fillMaxSize()) {
-                when {
-                    query.isBlank() -> Hint(stringResource(R.string.search_start_hint))
-                    query.trim().length < 2 -> Hint(stringResource(R.string.common_keep_typing))
-                    !anyResults -> Hint(stringResource(R.string.search_no_results, query))
-                    else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (channelResults.isNotEmpty()) {
-                            item { SectionHeader(stringResource(R.string.common_channels)) }
-                            items(channelResults, key = { "c${it.key}" }) { row ->
-                                SearchResultRow(row = row, onClick = { onPlayChannel(row.primary) })
-                            }
-                        }
-                        if (movieResults.isNotEmpty()) {
-                            item { SectionHeader(stringResource(R.string.nav_movies)) }
-                            items(movieResults, key = { "m${it.id}" }) { movie ->
-                                VodResultRow(movie.displayTitle, movie.posterUrl, movie.year?.toString()) {
-                                    onPlayMovie(movie)
-                                }
-                            }
-                        }
-                        if (seriesResults.isNotEmpty()) {
-                            item { SectionHeader(stringResource(R.string.nav_shows)) }
-                            items(seriesResults, key = { "s${it.id}" }) { show ->
-                                VodResultRow(show.displayTitle, show.posterUrl, show.year?.toString()) {
-                                    onOpenSeries(show)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            results(Modifier.weight(1f).fillMaxSize())
         }
     }
 }
@@ -203,7 +289,7 @@ private fun VodResultRow(name: String, posterUrl: String?, subtitle: String?, on
 }
 
 @Composable
-private fun SearchResultRow(row: ChannelsViewModel.Row, onClick: () -> Unit) {
+private fun SearchResultRow(row: ChannelsViewModel.Row, onClick: () -> Unit, recording: Boolean = false, onRecord: () -> Unit = {}) {
     var focused by remember { mutableStateOf(false) }
     Row(
         Modifier
@@ -238,6 +324,32 @@ private fun SearchResultRow(row: ChannelsViewModel.Row, onClick: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        // Record now (or stop) — focusable on its own, d-pad RIGHT from the row reaches it.
+        var recFocused by remember { mutableStateOf(false) }
+        Row(
+            Modifier
+                .onFocusChanged { recFocused = it.isFocused }
+                .clip(RoundedCornerShape(50))
+                .background(
+                    when {
+                        recFocused -> app.opentv.ui.theme.Obsidian.Magenta
+                        recording -> app.opentv.ui.theme.Obsidian.Magenta.copy(alpha = 0.25f)
+                        else -> MaterialTheme.colorScheme.surfaceVariant
+                    },
+                )
+                .clickable(onClick = onRecord)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(10.dp).clip(RoundedCornerShape(50)).background(if (recFocused) Color.White else app.opentv.ui.theme.Obsidian.Magenta))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                stringResource(if (recording) R.string.search_record_stop else R.string.search_record),
+                style = MaterialTheme.typography.labelLarge,
+                color = if (recFocused) Color.White else MaterialTheme.colorScheme.onSurface,
             )
         }
     }
