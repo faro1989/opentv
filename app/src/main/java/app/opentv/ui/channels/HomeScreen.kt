@@ -324,24 +324,27 @@ fun HomeScreen(
         // ---- Category rail -----------------------------------------------------------------
         // Width animates to 0 while focus is in the guide (see onFocusRow) so the grid gets the
         // whole screen; d-pad LEFT from the guide's channel column slides it back (onExitLeft…).
-        if (!compact) Column(
+        Column(
             Modifier
-                .width(railWidth)
+                // Phones keep the categories on the left too, in a narrower, always-open column.
+                .width(if (compact) 128.dp else railWidth)
                 .fillMaxHeight()
                 .background(MaterialTheme.colorScheme.surface)
                 .clipToBounds()
                 .padding(vertical = 16.dp),
         ) {
-            Text(
-                stringResource(R.string.nav_live_tv),
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(horizontal = 20.dp),
-            )
-            Spacer(Modifier.height(12.dp))
+            if (!compact) {
+                Text(
+                    stringResource(R.string.nav_live_tv),
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+                Spacer(Modifier.height(12.dp))
+            }
             // The top "Search channels" bar was removed — Search now lives in the global nav rail.
 
             LazyColumn(
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = if (compact) 6.dp else 10.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 // Provider switch — only when there's more than one source. Lets the user keep
@@ -357,6 +360,7 @@ fun HomeScreen(
                     }
                     item(key = "provider-all") {
                         RailEntry(
+                        compact = compact,
                             label = stringResource(R.string.channels_manager_all_sources),
                             selected = selectedSource == null,
                             onClick = { viewModel.selectSource(null) },
@@ -364,6 +368,7 @@ fun HomeScreen(
                     }
                     items(sources, key = { "src-${it.id}" }) { source ->
                         RailEntry(
+                        compact = compact,
                             label = source.name,
                             selected = selectedSource == source.id,
                             onClick = { viewModel.selectSource(source.id) },
@@ -375,6 +380,7 @@ fun HomeScreen(
                 // rail (d-pad LEFT in the guide) lands focus straight back on the current category.
                 item {
                     RailEntry(
+                        compact = compact,
                         label = stringResource(R.string.guide_favourites),
                         selected = favouritesOnly,
                         onClick = viewModel::selectFavourites,
@@ -385,6 +391,7 @@ fun HomeScreen(
                 items(favouriteLists, key = { "favlist-${it.id}" }) { list ->
                     val listSelected = selectedListId == list.id
                     RailEntry(
+                        compact = compact,
                         label = "☆ " + list.name,
                         selected = listSelected,
                         onClick = { viewModel.selectList(list.id) },
@@ -393,6 +400,7 @@ fun HomeScreen(
                 }
                 item(key = "favlist-manage") {
                     RailEntry(
+                        compact = compact,
                         label = stringResource(R.string.favlist_manage_rail),
                         selected = false,
                         onClick = { showManageLists = true },
@@ -400,6 +408,7 @@ fun HomeScreen(
                 }
                 item(key = "channel-order") {
                     RailEntry(
+                        compact = compact,
                         label = "⇅ " + stringResource(R.string.order_title),
                         selected = false,
                         onClick = onOpenChannelOrder,
@@ -408,6 +417,7 @@ fun HomeScreen(
                 item {
                     val allSelected = !favouritesOnly && selectedListId == null && selectedCategory == null
                     RailEntry(
+                        compact = compact,
                         label = stringResource(R.string.guide_all_channels),
                         selected = allSelected,
                         onClick = { viewModel.selectCategory(null) },
@@ -417,6 +427,7 @@ fun HomeScreen(
                 items(categories, key = { it.key }) { group ->
                     val groupSelected = !favouritesOnly && selectedListId == null && selectedCategory == group.key
                     RailEntry(
+                        compact = compact,
                         label = group.label,
                         selected = groupSelected,
                         onClick = { viewModel.selectCategory(group.key) },
@@ -428,38 +439,6 @@ fun HomeScreen(
 
         // ---- Preview + guide ---------------------------------------------------------------
         Column(Modifier.weight(1f)) {
-            if (compact) {
-                androidx.compose.foundation.lazy.LazyRow(
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (sources.size > 1) {
-                        item(key = "c-src-all") {
-                            CompactChip(stringResource(R.string.channels_manager_all_sources), selectedSource == null) { viewModel.selectSource(null) }
-                        }
-                        items(sources, key = { "c-src-${it.id}" }) { source ->
-                            CompactChip(source.name, selectedSource == source.id) { viewModel.selectSource(source.id) }
-                        }
-                    }
-                    item(key = "c-fav") { CompactChip(stringResource(R.string.guide_favourites), favouritesOnly, viewModel::selectFavourites) }
-                    items(favouriteLists, key = { "c-favlist-${it.id}" }) { list ->
-                        CompactChip("☆ " + list.name, selectedListId == list.id) { viewModel.selectList(list.id) }
-                    }
-                    item(key = "c-all") {
-                        CompactChip(
-                            stringResource(R.string.guide_all_channels),
-                            !favouritesOnly && selectedListId == null && selectedCategory == null,
-                        ) { viewModel.selectCategory(null) }
-                    }
-                    items(categories, key = { "c-" + it.key }) { group ->
-                        CompactChip(group.label, !favouritesOnly && selectedListId == null && selectedCategory == group.key) {
-                            viewModel.selectCategory(group.key)
-                        }
-                    }
-                    item(key = "c-manage") { CompactChip(stringResource(R.string.favlist_manage_rail), false) { showManageLists = true } }
-                    item(key = "c-order") { CompactChip("⇅ " + stringResource(R.string.order_title), false, onOpenChannelOrder) }
-                }
-            }
             if (rows.isEmpty()) {
                 when {
                     favouritesOnly -> NoFavouritesState()
@@ -1081,7 +1060,7 @@ private fun QualityChip(label: String, selected: Boolean, onClick: () -> Unit) {
  * a cyan hairline, bold white text and a glowing cyan dot when active; solid cyan ring on focus.
  */
 @Composable
-private fun RailEntry(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun RailEntry(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(50)
     Row(
@@ -1101,7 +1080,7 @@ private fun RailEntry(label: String, selected: Boolean, onClick: () -> Unit, mod
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = if (compact) 10.dp else 14.dp, vertical = if (compact) 8.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (selected) {
@@ -1334,18 +1313,3 @@ private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
 private fun formatTime(utcMillis: Long): String = timeFormat.format(Date(utcMillis))
 
-/** One entry of the phone's swipeable category bar: a pill, cyan when selected. */
-@Composable
-private fun CompactChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        label,
-        style = MaterialTheme.typography.labelLarge,
-        maxLines = 1,
-        color = if (selected) app.opentv.ui.theme.Obsidian.Canvas else MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (selected) app.opentv.ui.theme.Obsidian.Cyan else MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    )
-}

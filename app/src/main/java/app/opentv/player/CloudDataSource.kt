@@ -128,7 +128,9 @@ class CloudDataSource private constructor(
 
     class Factory(private val context: Context) : DataSource.Factory {
         private val client by lazy { OkHttpClient() }
-        override fun createDataSource(): DataSource {
+        override fun createDataSource(): DataSource = LazyCloudSource { build() }
+
+        private fun build(): DataSource {
             val settings = ServiceLocator.get(context).settings
             val cfg = CloudClient.config(settings)
             val http = OkHttpDataSource.Factory(client)
@@ -139,4 +141,24 @@ class CloudDataSource private constructor(
             return CloudDataSource(http, key)
         }
     }
+}
+
+/**
+ * Defers building the cloud source (settings, credentials, key derivation) until a cloud URI is
+ * really opened — the routing factory creates one per load for every stream, live TV included.
+ */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+private class LazyCloudSource(private val create: () -> DataSource) : DataSource {
+    private val listeners = mutableListOf<androidx.media3.datasource.TransferListener>()
+    private var inner: DataSource? = null
+    private fun real(): DataSource = inner ?: create().also { d -> listeners.forEach { d.addTransferListener(it) }; inner = d }
+    override fun addTransferListener(transferListener: androidx.media3.datasource.TransferListener) {
+        listeners += transferListener
+        inner?.addTransferListener(transferListener)
+    }
+    override fun open(dataSpec: androidx.media3.datasource.DataSpec): Long = real().open(dataSpec)
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int = real().read(buffer, offset, length)
+    override fun getUri(): android.net.Uri? = inner?.uri
+    override fun getResponseHeaders(): Map<String, List<String>> = inner?.responseHeaders ?: emptyMap()
+    override fun close() { inner?.close() }
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.1
+
+- Phone: categories back in a left column; content kept clear of screen edges, status bar and camera cutout
+- Player: cloud recording source is only built when a cloud recording is played
+
 ## 0.14.0
 
 - Own application id (app.streamflow.tv): StreamFlow installs next to, not over, upstream OpenTV

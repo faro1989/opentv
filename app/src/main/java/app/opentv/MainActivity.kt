@@ -5,6 +5,7 @@
  */
 package app.opentv
 
+import androidx.compose.foundation.layout.windowInsetsPadding
 import android.app.PictureInPictureParams
 import android.app.UiModeManager
 import android.content.Context
@@ -121,7 +122,18 @@ class MainActivity : ComponentActivity() {
             }
             OpenTvTheme(darkTheme = darkTheme) {
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // Phones: keep content clear of the status bar, the gesture bar and a camera
+                        // cutout (in landscape it sits on the left), plus a little breathing room so
+                        // text never hugs the screen edge. TVs draw edge to edge as before.
+                        .then(
+                            if (isTelevision) Modifier
+                            else Modifier
+                                .background(MaterialTheme.colorScheme.background)
+                                .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing)
+                                .padding(horizontal = 6.dp),
+                        ),
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     OpenTvApp(isTelevision = isTelevision)
