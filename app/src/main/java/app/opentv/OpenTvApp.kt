@@ -58,6 +58,7 @@ class OpenTvApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        app.opentv.core.CrashReport.install(this)
         val graph = ServiceLocator.get(this)
         SyncWorker.schedule(this)
 

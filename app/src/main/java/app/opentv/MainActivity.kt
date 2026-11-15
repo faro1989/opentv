@@ -108,6 +108,7 @@ class MainActivity : ComponentActivity() {
         handlePlayIntent(intent)
         val isTelevision = isRunningOnTelevision(this)
 
+        app.opentv.core.CrashReport.showIfAny(this)
         setContent {
             val settings = remember { ServiceLocator.get(this).settings }
             val themeMode by settings.themeMode.collectAsState()

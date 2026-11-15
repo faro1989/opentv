@@ -273,7 +273,7 @@ class PlayerController(
             if (debounce) delay(switchDebounceMillis)
 
             // VPN kill switch: refuse to open any stream outside the tunnel.
-            if (vpn.isBlocked()) {
+            if (runCatching { vpn?.isBlocked() == true }.getOrDefault(false)) {
                 player.stop()
                 _state.value = State.Error(request.title, appContext.getString(app.opentv.R.string.vpn_kill_blocked), canRetry = true)
                 return@launch
@@ -313,21 +313,21 @@ class PlayerController(
     }
 
     private val appContext = context.applicationContext
-    private val vpn = app.opentv.vpn.VpnController.get(context)
+    private val vpn = runCatching { app.opentv.vpn.VpnController.get(context) }.getOrNull()
 
     /** Live stream diagnosis (bitrate, codec, buffer, throughput, server, link) for the info panel. */
     val diagnostics = StreamDiagnostics(context.applicationContext, player)
 
     init {
         // The tunnel dropped while something plays and the kill switch is on: cut it immediately.
-        scope.launch {
-            vpn.status.collect {
-                if (vpn.isBlocked() && player.isPlaying) {
+        vpn?.let { v -> scope.launch {
+            v.status.collect {
+                if (runCatching { v.isBlocked() }.getOrDefault(false) && player.isPlaying) {
                     player.stop()
                     _state.value = State.Error(current?.title.orEmpty(), appContext.getString(app.opentv.R.string.vpn_kill_dropped), canRetry = true)
                 }
             }
-        }
+        } }
     }
 
     fun retry() {

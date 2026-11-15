@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.1
+
+- Crash report shown on next start; player hardened around VPN and diagnostics
+
 ## 0.12.0 — StreamFlow edition
 
 - Obsidian/StreamFlow design, multiple favourite lists with drag & drop

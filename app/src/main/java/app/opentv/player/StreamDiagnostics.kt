@@ -70,7 +70,7 @@ class StreamDiagnostics(private val context: Context, private val player: ExoPla
     private var mediaBytes = 0L
     private var mediaStartMs = 0L
 
-    init { player.addAnalyticsListener(this) }
+    init { runCatching { player.addAnalyticsListener(this) } }
 
     /** New channel: start the counters again (the server and line stats carry over sensibly). */
     fun reset() {
@@ -119,7 +119,7 @@ class StreamDiagnostics(private val context: Context, private val player: ExoPla
         val throughput = maxOf(throughputEma, bandwidthEstimate)
         val buffer = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0)
         val (link, rssi) = linkInfo()
-        val vpnOn = VpnController.get(context).status.value == VpnController.Status.CONNECTED
+        val vpnOn = runCatching { VpnController.get(context).status.value == VpnController.Status.CONNECTED }.getOrDefault(false)
 
         val verdict = when {
             v == null || lastState == Player.STATE_IDLE -> Verdict.STARTING
