@@ -6,6 +6,8 @@
 package app.opentv
 
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import android.app.PictureInPictureParams
 import android.app.UiModeManager
 import android.content.Context
@@ -131,7 +133,7 @@ class MainActivity : ComponentActivity() {
                             if (isTelevision) Modifier
                             else Modifier
                                 .background(MaterialTheme.colorScheme.background)
-                                .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing)
+                                .windowInsetsPadding(WindowInsets.safeDrawing)
                                 .padding(horizontal = 6.dp),
                         ),
                     color = MaterialTheme.colorScheme.background,
