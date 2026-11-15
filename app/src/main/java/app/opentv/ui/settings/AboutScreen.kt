@@ -77,7 +77,6 @@ fun AboutScreen(onBack: () -> Unit) {
 
         Section(stringResource(R.string.about_version)) {
             Text("Zapora ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.about_based_on), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(
@@ -139,14 +138,6 @@ fun AboutScreen(onBack: () -> Unit) {
             }
         }
 
-        Spacer(Modifier.height(24.dp))
-
-        // The licence requires naming the original and offering the source; kept to one small line.
-        LinkLine(
-            stringResource(R.string.about_licence_label),
-            "GPL-3.0 · github.com/faro1989/opentv",
-            url = "https://github.com/faro1989/opentv",
-        )
     }
 }
 

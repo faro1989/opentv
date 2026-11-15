@@ -119,6 +119,27 @@ fun SettingsHubScreen(
             modifier = Modifier.widthIn(max = 760.dp),
         ) {
             items(entries) { entry -> HubRow(entry) }
+            // Licence notice (GPL-3.0 §5d asks for it in the app's interface): one small, focusable
+            // line at the very end of the list.
+            item {
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                Text(
+                    stringResource(R.string.legal_notice),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            runCatching {
+                                ctx.startActivity(
+                                    android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/faro1989/opentv"))
+                                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            }
+                        }
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                )
+            }
         }
     }
 }

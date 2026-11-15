@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.5
+
+- About page: version and donations only; licence notice moved to the end of Settings
+
 ## 0.15.4
 
 - About: version and update check, donation via PayPal with QR code

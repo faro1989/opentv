@@ -15,8 +15,8 @@ android {
         applicationId = "app.streamflow.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 36
-        versionName = "0.15.4"
+        versionCode = 37
+        versionName = "0.15.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
