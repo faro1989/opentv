@@ -792,4 +792,8 @@
     <string name="legal_notice">Based on OpenTV · GPL-3.0 · no warranty · source: github.com/faro1989/opentv</string>
     <string name="player_no_rewind">This channel cannot be rewound (no archive).</string>
     <string name="player_back_to_live">Live</string>
+    <string name="logout_title">Log out</string>
+    <string name="logout_subtitle">Remove your provider login from this device</string>
+    <string name="logout_body">Your provider accounts and their channels, movies and series are removed from this device. Favourites lists and settings stay. You can sign in again at any time.</string>
+    <string name="logout_confirm">Log out</string>
 </resources>

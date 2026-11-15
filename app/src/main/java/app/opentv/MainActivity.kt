@@ -456,6 +456,14 @@ private fun OpenTvApp(isTelevision: Boolean) {
                         onOpenChannelOrder = { navController.navigate(Routes.CHANNEL_ORDER) },
                         onOpenPhoneRemote = { navController.navigate(Routes.PHONE_REMOTE) },
                         onOpenBackup = { navController.navigate(Routes.BACKUP) },
+                        onLogout = {
+                            sourcesViewModel.logout {
+                                navController.navigate(Routes.ADD_SOURCE) {
+                                    popUpTo(0) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
                         onBack = { navController.popBackStack() },
                     )
                 }

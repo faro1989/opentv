@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
@@ -79,8 +80,27 @@ fun SettingsHubScreen(
     onOpenChannelOrder: () -> Unit = {},
     onOpenPhoneRemote: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
+    onLogout: () -> Unit = {},
     onBack: () -> Unit,
 ) {
+    var confirmLogout by remember { mutableStateOf(false) }
+    if (confirmLogout) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmLogout = false },
+            title = { Text(stringResource(R.string.logout_title)) },
+            text = { Text(stringResource(R.string.logout_body)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmLogout = false; onLogout() }) {
+                    Text(stringResource(R.string.logout_confirm), color = app.opentv.ui.theme.Obsidian.Magenta)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmLogout = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
+        )
+    }
     val entries = listOf(
         HubEntry(Icons.Filled.Dns, stringResource(R.string.settings_providers_title), stringResource(R.string.settings_providers_subtitle), onOpenProviders),
         HubEntry(Icons.Filled.Extension, stringResource(R.string.settings_addons_title), stringResource(R.string.settings_addons_subtitle), onOpenAddons),
@@ -97,6 +117,7 @@ fun SettingsHubScreen(
         HubEntry(Icons.Filled.VpnKey, stringResource(R.string.vpn_title), stringResource(R.string.vpn_hub_subtitle), onOpenVpn),
         HubEntry(Icons.Filled.Sync, stringResource(R.string.settings_sync_title), stringResource(R.string.settings_sync_subtitle), onOpenSync),
         HubEntry(Icons.Filled.Info, stringResource(R.string.settings_about_title), stringResource(R.string.settings_about_subtitle), onOpenAbout),
+        HubEntry(Icons.Filled.Logout, stringResource(R.string.logout_title), stringResource(R.string.logout_subtitle)) { confirmLogout = true },
     )
 
     Column(

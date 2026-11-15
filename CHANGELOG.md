@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.0
+
+- Log out: Settings → Log out removes the provider login(s) and returns to sign-in
+
 ## 0.16.1
 
 - TV: left rail fits 1080p screens again (VPN and phone remote moved to Settings), so Settings is visible

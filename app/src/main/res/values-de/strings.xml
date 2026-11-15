@@ -726,4 +726,8 @@
     <string name="legal_notice">Basiert auf OpenTV · GPL-3.0 · ohne Gewähr · Quellcode: github.com/faro1989/opentv</string>
     <string name="player_no_rewind">Dieser Sender kann nicht zurückgespult werden (kein Archiv).</string>
     <string name="player_back_to_live">Live</string>
+    <string name="logout_title">Abmelden</string>
+    <string name="logout_subtitle">Anbieter-Login von diesem Gerät entfernen</string>
+    <string name="logout_body">Deine Anbieter-Zugänge mit ihren Sendern, Filmen und Serien werden von diesem Gerät entfernt. Favoritenlisten und Einstellungen bleiben. Du kannst dich jederzeit wieder anmelden.</string>
+    <string name="logout_confirm">Abmelden</string>
 </resources>

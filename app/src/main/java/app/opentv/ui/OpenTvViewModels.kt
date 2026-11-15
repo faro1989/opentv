@@ -172,6 +172,18 @@ class SourcesViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Log out: remove every provider account (and with it its channels, movies, series and stored
+     * login), forget the last channel, then hand back to the sign-in screen.
+     */
+    fun logout(onDone: () -> Unit) {
+        viewModelScope.launch {
+            ui.value.sources.forEach { runCatching { graph.catalogRepository.deleteSource(it.id) } }
+            runCatching { graph.settings.lastChannelId = 0L }
+            onDone()
+        }
+    }
+
+    /**
      * Change an Xtream source's live-stream container. The repository rewrites the source's live
      * channel URLs in place, so the switch takes effect without a re-sync; the observed source list
      * then re-emits with the new [Source.liveFormat]. A no-op for M3U sources and unchanged values.
