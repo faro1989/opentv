@@ -708,4 +708,8 @@
     <string name="ch_hide_menu">Kanal ausblenden</string>
     <string name="ch_hidden_toast">Ausgeblendet. Wieder einblenden unter Einstellungen → Sender.</string>
     <string name="about_based_on">Basiert auf OpenTV von The OpenTV Contributors · GPL-3.0</string>
+    <string name="keepalive_title">Dauerbetrieb</string>
+    <string name="keepalive_subtitle">StreamFlow läuft weiter, wenn der Fernseher aus ist, und ist beim Einschalten sofort wieder da. Nur „Beenden“ schließt die App.</string>
+    <string name="keepalive_channel">Dauerbetrieb</string>
+    <string name="keepalive_running">StreamFlow bleibt im Hintergrund bereit</string>
 </resources>

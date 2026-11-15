@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.1
+
+- Always-on mode: keeps running while the TV is off, returns to the screen on power-on, starts after a reboot and reopens after a crash; only Exit closes it
+
 ## 0.13.0
 
 - New name and logo: StreamFlow (based on OpenTV)

@@ -205,6 +205,14 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 checked = resumeLast,
                 onToggle = settings::setResumeLastChannel,
             )
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            var alwaysOn by remember { mutableStateOf(app.opentv.core.KeepAlive.isEnabled(ctx)) }
+            ToggleRow(
+                title = stringResource(R.string.keepalive_title),
+                subtitle = stringResource(R.string.keepalive_subtitle),
+                checked = alwaysOn,
+                onToggle = { alwaysOn = it; app.opentv.core.KeepAlive.setEnabled(ctx, it) },
+            )
         }
 
         Spacer(Modifier.height(16.dp))

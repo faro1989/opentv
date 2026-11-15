@@ -29,6 +29,17 @@ object CrashReport {
                         "Thread: ${thread.name}\n\n" + error.stackTraceToString().take(6_000),
                 )
             }
+            // Always-on: reopen StreamFlow a moment after the crash instead of leaving the TV on the launcher.
+            if (KeepAlive.shouldRun(app)) runCatching {
+                val restart = android.app.PendingIntent.getActivity(
+                    app, 4711,
+                    android.content.Intent(app, app.opentv.MainActivity::class.java)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK),
+                    android.app.PendingIntent.FLAG_ONE_SHOT or android.app.PendingIntent.FLAG_IMMUTABLE,
+                )
+                val am = app.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+                am.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 2_000, restart)
+            }
             previous?.uncaughtException(thread, error)
         }
     }

@@ -775,4 +775,8 @@
     <string name="ch_hide_menu">Hide channel</string>
     <string name="ch_hidden_toast">Hidden. Show it again under Settings → Channels.</string>
     <string name="about_based_on">Based on OpenTV by The OpenTV Contributors · GPL-3.0</string>
+    <string name="keepalive_title">Always on</string>
+    <string name="keepalive_subtitle">StreamFlow keeps running when the TV is off and is back on screen when you switch it on. Only \"Exit\" closes it.</string>
+    <string name="keepalive_channel">Always-on mode</string>
+    <string name="keepalive_running">StreamFlow stays ready in the background</string>
 </resources>

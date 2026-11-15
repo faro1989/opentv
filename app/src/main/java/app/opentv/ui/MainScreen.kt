@@ -154,7 +154,11 @@ fun MainScreen(
             title = { Text(stringResource(R.string.exit_title)) },
             text = { Text(stringResource(R.string.exit_body)) },
             confirmButton = {
-                TextButton(onClick = { showExit = false; context.findActivity()?.finish() }) {
+                TextButton(onClick = {
+                    showExit = false
+                    app.opentv.core.KeepAlive.onUserExit(context)
+                    context.findActivity()?.finish()
+                }) {
                     Text(stringResource(R.string.exit_confirm))
                 }
             },
