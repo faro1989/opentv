@@ -34,7 +34,7 @@ jobs:
         run: sh scripts/fetch-fonts.sh
 
       - name: Unit tests
-        run: ./gradlew test --stacktrace
+        run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Assemble debug APK
         run: ./gradlew assembleDebug --stacktrace
