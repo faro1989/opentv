@@ -214,6 +214,13 @@ class PlayerController(
                 )
                 // Retain the last few minutes so pause/rewind of live TV has something to seek into.
                 .apply { if (dvr) setBackBuffer(DVR_BACK_BUFFER_MILLIS, true) }
+                // Hard memory cap. ExoPlayer keeps buffered video on the Java heap and, unless told
+                // otherwise, targets ~130 MB for video — with the live-pause back buffer an HD channel
+                // reaches that within two minutes, and on a 192–256 MB heap the app then dies with an
+                // OutOfMemoryError mid-programme. Cap it to a share of this device's heap and let the
+                // byte limit win over the time targets.
+                .setTargetBufferBytes(targetBufferBytes(preview))
+                .setPrioritizeTimeOverSizeThresholds(false)
                 .build(),
         )
         .build()
@@ -330,6 +337,13 @@ class PlayerController(
         } }
     }
 
+    private fun targetBufferBytes(preview: Boolean): Int {
+        val heap = Runtime.getRuntime().maxMemory()
+        val share = if (preview) heap / 16 else heap / 5
+        val cap = if (preview) PREVIEW_MAX_BUFFER_BYTES else MAX_BUFFER_BYTES
+        return share.coerceIn(MIN_BUFFER_BYTES.toLong(), cap.toLong()).toInt()
+    }
+
     fun retry() {
         current?.let { play(it, debounce = false) }
     }
@@ -421,6 +435,9 @@ class PlayerController(
          * deeper buffer is the difference between a momentary hiccup and a visible stall.
          */
         const val MIN_BUFFER_MILLIS = 15_000
+        const val MAX_BUFFER_BYTES = 48 * 1024 * 1024
+        const val PREVIEW_MAX_BUFFER_BYTES = 12 * 1024 * 1024
+        const val MIN_BUFFER_BYTES = 8 * 1024 * 1024
         const val MAX_BUFFER_MILLIS = 60_000
         const val BUFFER_FOR_PLAYBACK_MILLIS = 2_500
         const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MILLIS = 5_000

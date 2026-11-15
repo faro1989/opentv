@@ -118,6 +118,8 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           target_commitish: ${{ github.sha }}
-          files: dist/*.apk
+          files: |
+            dist/*.apk
+            app/build/outputs/mapping/release/mapping.txt
           generate_release_notes: false
           body_path: release-notes.md

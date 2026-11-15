@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.1
+
+- Fix crash during playback: player buffer memory is capped to the device's heap (live pause kept up to ~130 MB of video in memory); large heap enabled
+
 ## 0.15.0
 
 - New name: Zapora
