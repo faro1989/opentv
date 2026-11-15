@@ -26,7 +26,7 @@ object ManagerPage {
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <meta name="robots" content="noindex, nofollow">
-        <title>StreamFlow — manage channels</title>
+        <title>Zapora — manage channels</title>
         <style>
           :root { --bg:#07080c; --surface:#12141d; --surface2:#181b26; --line:#2a2f3d;
                   --text:#e8eaf0; --muted:#a8aec0; --accent:#7c93ff; --accent2:#3a447a;
@@ -112,7 +112,7 @@ object ManagerPage {
         <body>
           <div class="wrap">
             <header>
-              <h1>StreamFlow — manage channels</h1>
+              <h1>Zapora — manage channels</h1>
               <p class="hint">Changes apply to your TV the moment you make them.</p>
             </header>
 

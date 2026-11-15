@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.0
+
+- New name: Zapora
+
 ## 0.14.1
 
 - Phone: categories back in a left column; content kept clear of screen edges, status bar and camera cutout

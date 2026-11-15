@@ -16,7 +16,7 @@ object RemotePage {
 <!DOCTYPE html><html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#0B0F14"><meta name="apple-mobile-web-app-capable" content="yes">
-<title>StreamFlow Fernbedienung</title>
+<title>Zapora Fernbedienung</title>
 <style>
 :root{--c:#00F2FE;--bg:#0B0F14;--s:#141A23;--e:#1E2633;--m:#94A3B8;--v:#7928CA;--g:#FF007A}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none}
@@ -46,7 +46,7 @@ button:active{background:rgba(0,242,254,.18);border-color:var(--c);transform:sca
 .tabs{display:flex;gap:8px}.tabs button{flex:1;height:40px;font-size:13px;font-weight:600;color:var(--m)}.tabs button.on{color:#fff;border-color:rgba(0,242,254,.4);background:rgba(0,242,254,.12)}
 .hint{font-size:11px;color:#64748B;text-align:center}
 </style></head><body>
-<header><div class="logo">▶</div><b>StreamFlow</b><span class="lock" id="lock">🔒 verschlüsselt</span></header>
+<header><div class="logo">▶</div><b>Zapora</b><span class="lock" id="lock">🔒 verschlüsselt</span></header>
 <div class="status" id="st">Verbunden mit deinem Fernseher</div>
 <div class="row r4">
  <button data-k="back">↩<br><small>Zurück</small></button><button data-k="menu">☰<br><small>Menü</small></button>

@@ -392,13 +392,13 @@ private fun NavRail(
         ) {
             Image(
                 painter = painterResource(R.drawable.ic_launcher),
-                contentDescription = "StreamFlow",
+                contentDescription = "Zapora",
                 modifier = Modifier.size(34.dp),
             )
             if (expanded) {
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    "StreamFlow",
+                    "Zapora",
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,
