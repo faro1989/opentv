@@ -304,7 +304,7 @@
     <string name="about_built_open_title">Offen entwickelt</string>
     <string name="about_built_open_body">OpenTV wird offen entwickelt, wobei KI unter menschlicher Anleitung einen großen Teil des Codes schreibt — das wird klar gesagt, nicht verschwiegen. Da es Open Source ist, kann keine einzelne Person durch ihr Ausscheiden das Projekt beenden: Jeder kann jede Zeile lesen, sie kompilieren und weiterführen.</string>
     <string name="about_support_title">Projekt unterstützen</string>
-    <string name="about_scan_to_donate">Zum Spenden scannen</string>
+    <string name="about_scan_to_donate">Mit dem Handy scannen und per PayPal spenden</string>
     <string name="about_licence_links_title">Lizenz &amp; Links</string>
     <string name="about_licence_label">Lizenz</string>
     <string name="about_source_code">Quellcode</string>
@@ -720,4 +720,7 @@
     <string name="search_field_hint">Sender, Filme oder Serien …</string>
     <string name="search_categories">Rubriken</string>
     <string name="search_pick_category">Wähle links eine Rubrik, um ihre Sender zu sehen.</string>
+    <string name="about_donate_title">Spenden</string>
+    <string name="about_donate_body">Zapora ist kostenlos. Wenn dir die App gefällt, kannst du sie mit einer Spende unterstützen – danke!</string>
+    <string name="about_donate_paypal">PayPal</string>
 </resources>

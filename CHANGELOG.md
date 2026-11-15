@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.4
+
+- About: version and update check, donation via PayPal with QR code
+
 ## 0.15.3
 
 - Search: keyboard opens reliably on phones; matching categories listed on the left, tap one to see all its channels

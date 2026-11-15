@@ -343,7 +343,7 @@
     <string name="about_support_body">OpenTV is free and always will be — nothing is gated. If it\'s useful and you\'d like to chip in, GitHub Sponsors or a one-off tip keeps the updates coming: new features, fixes and support all come out of spare evenings. Entirely optional, and genuinely appreciated.</string>
     <string name="about_sponsor_github">GitHub Sponsors</string>
     <string name="about_donate_paypal">Donate via PayPal</string>
-    <string name="about_scan_to_donate">Scan to donate</string>
+    <string name="about_scan_to_donate">Scan with your phone to donate via PayPal</string>
     <string name="about_licence_links_title">Licence &amp; links</string>
     <string name="about_licence_label">Licence</string>
     <string name="about_source_code">Source code</string>
@@ -787,4 +787,6 @@
     <string name="search_field_hint">Channels, movies or series …</string>
     <string name="search_categories">Categories</string>
     <string name="search_pick_category">Pick a category on the left to see its channels.</string>
+    <string name="about_donate_title">Donate</string>
+    <string name="about_donate_body">Zapora is free. If you like it, you can support it with a donation — thank you!</string>
 </resources>
