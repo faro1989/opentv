@@ -187,7 +187,15 @@ class PlayerController(
         .setSeekBackIncrementMs(SEEK_INCREMENT_MILLIS)
         .setSeekForwardIncrementMs(SEEK_INCREMENT_MILLIS)
         .setMediaSourceFactory(
-            DefaultMediaSourceFactory(dataSourceFactory)
+            // Constant-bitrate seeking: IPTV movies and catch-up often come as MPEG-TS or other files
+            // without a seek index, which ExoPlayer otherwise treats as unseekable — rewind and
+            // fast-forward then silently do nothing. With it, seeking jumps by estimated byte offset.
+            DefaultMediaSourceFactory(
+                dataSourceFactory,
+                androidx.media3.extractor.DefaultExtractorsFactory()
+                    .setConstantBitrateSeekingEnabled(true)
+                    .setConstantBitrateSeekingAlwaysEnabled(true),
+            )
                 .setLoadErrorHandlingPolicy(loadErrorPolicy),
         )
         .setTrackSelector(trackSelector)

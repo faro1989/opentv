@@ -724,4 +724,6 @@
     <string name="about_donate_body">Zapora ist kostenlos. Wenn dir die App gefällt, kannst du sie mit einer Spende unterstützen – danke!</string>
     <string name="about_donate_paypal">PayPal</string>
     <string name="legal_notice">Basiert auf OpenTV · GPL-3.0 · ohne Gewähr · Quellcode: github.com/faro1989/opentv</string>
+    <string name="player_no_rewind">Dieser Sender kann nicht zurückgespult werden (kein Archiv).</string>
+    <string name="player_back_to_live">Live</string>
 </resources>

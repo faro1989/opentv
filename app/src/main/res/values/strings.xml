@@ -790,4 +790,6 @@
     <string name="about_donate_title">Donate</string>
     <string name="about_donate_body">Zapora is free. If you like it, you can support it with a donation — thank you!</string>
     <string name="legal_notice">Based on OpenTV · GPL-3.0 · no warranty · source: github.com/faro1989/opentv</string>
+    <string name="player_no_rewind">This channel can't be rewound (no archive).</string>
+    <string name="player_back_to_live">Live</string>
 </resources>

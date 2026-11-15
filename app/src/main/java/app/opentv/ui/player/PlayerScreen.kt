@@ -5,6 +5,7 @@
  */
 package app.opentv.ui.player
 
+import android.widget.Toast
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -51,6 +52,7 @@ import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
@@ -176,6 +178,8 @@ fun PlayerScreen(
     // Digits typed on the remote accumulate here, then jump to that channel number after a beat.
     var numberEntry by remember { mutableStateOf("") }
     var paused by remember { mutableStateOf(false) }
+    // Start of the archive stream while watching behind live; null = live.
+    var timeshiftStart by remember { mutableStateOf<Long?>(null) }
     // Stream diagnosis panel (Info key, phone remote ⓘ, or the bar's "Diagnose" chip).
     var showDiagnostics by remember { mutableStateOf(false) }
     var resizeMode by remember { mutableIntStateOf(settings.playerResizeMode.value) }
@@ -220,6 +224,7 @@ fun PlayerScreen(
     }
 
     fun tuneTo(channel: Channel) {
+        timeshiftStart = null
         currentId = channel.id
         paused = false
         settings.lastChannelId = channel.id
@@ -236,6 +241,70 @@ fun PlayerScreen(
                 ),
                 debounce = false,
             )
+        }
+    }
+
+    // ---- Live rewind through the provider's archive (catch-up / timeshift) ----------------------
+    // A live MPEG-TS stream can't be seeked, so on a channel with an archive "rewind" switches to the
+    // archive stream a little behind live; from there rewind/forward seek freely, and running into
+    // the present (or the LIVE chip) returns to the live stream.
+    val currentChannel: Channel? = variants.firstOrNull { it.id == currentId }
+    val canTimeshift = currentChannel?.tvArchive == true && currentChannel.streamId.isNotBlank()
+
+    fun startTimeshift(behindMillis: Long) {
+        val channel = currentChannel ?: return
+        scope.launch {
+            val source = graph.sourceRepository.byId(channel.sourceId) ?: return@launch
+            if (source.username.isNullOrBlank() || source.password.isNullOrBlank()) {
+                Toast.makeText(context, context.getString(R.string.player_no_rewind), Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val now = System.currentTimeMillis()
+            // The archive URL is minute-resolution: start a bit earlier and seek to the exact point.
+            val start = ((now - behindMillis - 5 * 60_000L) / 60_000L) * 60_000L
+            val url = graph.xtreamApi.catchupUrl(source, channel.streamId, start, 240)
+            timeshiftStart = start
+            paused = false
+            controller.play(
+                PlayerController.Request(
+                    url = url,
+                    title = channel.shownName,
+                    userAgent = source.userAgent,
+                    startPositionMillis = (now - behindMillis - start).coerceAtLeast(0),
+                    isLive = false,
+                ),
+                debounce = false,
+            )
+        }
+    }
+
+    fun backToLive() {
+        currentChannel?.let { tuneTo(it) }
+    }
+
+    fun rewind() {
+        when {
+            timeshiftStart != null -> {
+                val p = controller.player
+                p.seekTo((p.currentPosition - REWIND_STEP_MILLIS).coerceAtLeast(0))
+            }
+            controller.isSeekable -> controller.seekBackward()
+            canTimeshift -> startTimeshift(REWIND_STEP_MILLIS)
+            else -> Toast.makeText(context, context.getString(R.string.player_no_rewind), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun forward() {
+        val start = timeshiftStart
+        when {
+            start != null -> {
+                val p = controller.player
+                val target = p.currentPosition + REWIND_STEP_MILLIS
+                // Caught up with the present: back to the real live stream.
+                if (start + target >= System.currentTimeMillis() - 20_000L) backToLive() else p.seekTo(target)
+            }
+            controller.isSeekable -> controller.seekForward()
+            else -> Unit // already live
         }
     }
 
@@ -382,6 +451,8 @@ fun PlayerScreen(
                         reveal(); true
                     }
                     event.key == Key.MediaStop -> { onBack(); true }
+                    event.key == Key.MediaRewind -> { rewind(); reveal(); true }
+                    event.key == Key.MediaFastForward -> { forward(); reveal(); true }
                     event.key == Key.Info -> { showDiagnostics = !showDiagnostics; true }
                     // A picker or the channel list owns the whole d-pad while it's up.
                     channelListVisible || panel != Panel.NONE -> {
@@ -536,9 +607,9 @@ fun PlayerScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (controller.isSeekable) {
+                    if (controller.isSeekable || canTimeshift || timeshiftStart != null) {
                         BarChip(Icons.Filled.FastRewind, stringResource(R.string.player_rewind), false) {
-                            controller.seekBackward(); interaction++
+                            rewind(); interaction++
                         }
                         Spacer(Modifier.width(10.dp))
                     }
@@ -552,10 +623,16 @@ fun PlayerScreen(
                         controller.player.playWhenReady = !paused
                         interaction++
                     }
-                    if (controller.isSeekable) {
+                    if (controller.isSeekable || timeshiftStart != null) {
                         Spacer(Modifier.width(10.dp))
                         BarChip(Icons.Filled.FastForward, stringResource(R.string.player_forward), false) {
-                            controller.seekForward(); interaction++
+                            forward(); interaction++
+                        }
+                    }
+                    if (timeshiftStart != null) {
+                        Spacer(Modifier.width(10.dp))
+                        BarChip(Icons.Filled.LiveTv, stringResource(R.string.player_back_to_live), true) {
+                            backToLive(); interaction++
                         }
                     }
 
@@ -942,3 +1019,5 @@ private fun keyToDigit(key: Key): Char? = when (key) {
     Key.Nine, Key.NumPad9 -> '9'
     else -> null
 }
+
+private const val REWIND_STEP_MILLIS = 15_000L

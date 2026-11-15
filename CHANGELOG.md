@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.16.0
+
+- Rewind / fast-forward work on movies, series and catch-up without a seek index (constant-bitrate seeking)
+- Live TV: rewind through the provider archive on channels with catch-up, Live chip returns to live; remote rewind/fast-forward keys
+
 ## 0.15.5
 
 - About page: version and donations only; licence notice moved to the end of Settings
