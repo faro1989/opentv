@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.2
+
+- Movies and series for M3U links from Xtream panels (get.php); their VOD entries no longer flood the channel list
+- Hide a channel straight from its menu
+
 ## 0.12.1
 
 - Crash report shown on next start; player hardened around VPN and diagnostics

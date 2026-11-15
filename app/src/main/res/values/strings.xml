@@ -772,4 +772,6 @@
     <string name="diag_a_connection">Less arrives than the stream needs. Choose a lower quality or check your internet line.</string>
     <string name="diag_v_device">The device can’t keep up</string>
     <string name="diag_a_device">Enough data arrives, but the box drops frames while decoding. A lower quality (e.g. HD instead of 4K/HEVC) helps.</string>
+    <string name="ch_hide_menu">Hide channel</string>
+    <string name="ch_hidden_toast">Hidden. Show it again under Settings → Channels.</string>
 </resources>

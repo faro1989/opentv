@@ -787,6 +787,14 @@ fun HomeScreen(
                         channelMenu = null
                         numberRow = menuRow
                     }
+                    // Hide a channel you never watch; Settings → Channels shows it again.
+                    val hiddenToast = stringResource(R.string.ch_hidden_toast)
+                    val toastContext = androidx.compose.ui.platform.LocalContext.current
+                    RecordActionRow(stringResource(R.string.ch_hide_menu)) {
+                        channelMenu = null
+                        viewModel.hide(menuRow)
+                        android.widget.Toast.makeText(toastContext, hiddenToast, android.widget.Toast.LENGTH_LONG).show()
+                    }
                     // Browsing one of the user's lists: reorder or drop the channel right here.
                     if (selectedListId != null) {
                         val listId = selectedListId

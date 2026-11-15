@@ -705,4 +705,6 @@
     <string name="diag_a_connection">Es kommt weniger an, als der Stream braucht. Niedrigere Qualität wählen oder den Internetanschluss prüfen.</string>
     <string name="diag_v_device">Das Gerät kommt nicht hinterher</string>
     <string name="diag_a_device">Es kommen genug Daten an, aber die Box verwirft beim Dekodieren Bilder. Eine niedrigere Qualität (z. B. HD statt 4K/HEVC) hilft.</string>
+    <string name="ch_hide_menu">Kanal ausblenden</string>
+    <string name="ch_hidden_toast">Ausgeblendet. Wieder einblenden unter Einstellungen → Sender.</string>
 </resources>

@@ -33,6 +33,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -406,7 +407,7 @@ class CatalogRepository(
     suspend fun movieDetail(id: Long): Movie? = withContext(Dispatchers.IO) {
         val movie = movieDao.byId(id) ?: return@withContext null
         var result = movie
-        val source = sourceDao.byId(movie.sourceId)
+        val source = sourceDao.byId(movie.sourceId)?.let { xtreamView(it) }
 
         // 1) Provider back-fill from get_vod_info, for a still-bare row on an Xtream source.
         if (!result.isEnriched && source?.kind == SourceKind.XTREAM) {
@@ -456,7 +457,7 @@ class CatalogRepository(
     suspend fun seriesDetail(id: Long): Series? = withContext(Dispatchers.IO) {
         val series = seriesDao.byId(id) ?: return@withContext null
         var result = series
-        val source = sourceDao.byId(series.sourceId)
+        val source = sourceDao.byId(series.sourceId)?.let { xtreamView(it) }
 
         // 1) Provider back-fill from get_series_info, for a still-bare row on an Xtream source.
         if (!result.isEnriched && source?.kind == SourceKind.XTREAM) {
@@ -600,8 +601,8 @@ class CatalogRepository(
         seriesDao.markFavouriteBySeriesId(seriesId)
 
     /** Series episodes are fetched lazily — panels are slow and most series are never opened. */
-    suspend fun ensureEpisodes(source: Source, seriesId: String) {
-        if (source.kind != SourceKind.XTREAM) return
+    suspend fun ensureEpisodes(original: Source, seriesId: String) {
+        val source = xtreamView(original) ?: return
         runCatching { api.episodes(source, seriesId) }
             .onSuccess { if (it.isNotEmpty()) episodeDao.upsertAll(it) }
             .onFailure { Log.w(TAG, "Episode fetch failed for series $seriesId", it) }
@@ -620,8 +621,9 @@ class CatalogRepository(
         val live =
             if (settings.liveEnabled.value) syncLive(source, nowUtcMillis)
             else SyncResult.Success(0, 0, 0)
-        if (live is SyncResult.Success && source.kind == SourceKind.XTREAM) {
-            runCatching { syncXtreamVod(source, nowUtcMillis) }
+        val vodSource = xtreamView(source)
+        if (live is SyncResult.Success && vodSource != null) {
+            runCatching { syncXtreamVod(vodSource, nowUtcMillis) }
                 .onFailure { Log.w(TAG, "VOD sync failed for source ${source.id}", it) }
         }
         live
@@ -646,7 +648,7 @@ class CatalogRepository(
     /** Movies + series — best-effort, meant to run in the background so a huge VOD list never
      * blocks live TV. Silent on failure: an account with no VOD is normal, not an error. */
     suspend fun syncVod(source: Source, nowUtcMillis: Long) = withContext(Dispatchers.IO) {
-        runCatching { if (source.kind == SourceKind.XTREAM) syncXtreamVod(source, nowUtcMillis) }
+        runCatching { xtreamView(source)?.let { syncXtreamVod(it, nowUtcMillis) } }
             .onFailure { Log.w(TAG, "VOD sync failed for source ${source.id}", it) }
     }
 
@@ -755,8 +757,15 @@ class CatalogRepository(
             )
         }
 
+        // An Xtream panel's get.php playlist also lists every movie and episode. Those are loaded
+        // as real Movies/Series through the panel's API (see xtreamView), so keep them out of the
+        // channel list — otherwise tens of thousands of VOD rows swamp the guide and slow it down.
+        val liveOnly = if (xtreamView(source) != null) {
+            parsed.channels.filterNot { isVodUrl(it.streamUrl) }.ifEmpty { parsed.channels }
+        } else parsed.channels
+
         // Synthesise categories from group-title so the UI has something to group by.
-        val categories = parsed.channels
+        val categories = liveOnly
             .mapNotNull { it.categoryId }
             .distinct()
             .sorted()
@@ -772,7 +781,7 @@ class CatalogRepository(
 
         categoryDao.upsertAll(categories)
         val categoryNames = categories.associate { it.id to it.name }
-        channelDao.replaceCatalogue(source.id, normalized(parsed.channels, categoryNames), nowUtcMillis)
+        channelDao.replaceCatalogue(source.id, normalized(liveOnly, categoryNames), nowUtcMillis)
 
         // If the playlist declared its own guide URL and the user did not set one, adopt it.
         if (source.epgUrl.isNullOrBlank() && !parsed.declaredEpgUrl.isNullOrBlank()) {
@@ -780,7 +789,29 @@ class CatalogRepository(
         }
 
         sourceDao.markCatalogSynced(source.id, nowUtcMillis)
-        return SyncResult.Success(parsed.channels.size, 0, 0)
+        return SyncResult.Success(liveOnly.size, 0, 0)
+    }
+
+    private fun isVodUrl(url: String): Boolean {
+        val path = runCatching { java.net.URI(url).path.orEmpty() }.getOrDefault(url).lowercase()
+        return path.contains("/movie/") || path.contains("/series/")
+    }
+
+    /**
+     * The source as an Xtream panel, for movies and series. An Xtream source is returned as is.
+     * An M3U source whose link is a panel's `get.php?username=…&password=…` playlist — what most
+     * providers hand out — is the same panel, so it gets the panel's movie and series library too.
+     * Anything else (plain M3U, Stalker) has no VOD API: null.
+     */
+    private fun xtreamView(source: Source): Source? {
+        if (source.kind == SourceKind.XTREAM) return source
+        if (source.kind != SourceKind.M3U) return null
+        val url = source.url.toHttpUrlOrNull() ?: return null
+        if (!url.encodedPath.endsWith("/get.php")) return null
+        val user = url.queryParameter("username")?.takeIf { it.isNotBlank() } ?: return null
+        val pass = url.queryParameter("password")?.takeIf { it.isNotBlank() } ?: return null
+        val base = url.newBuilder().encodedPath("/").query(null).build().toString().trimEnd('/')
+        return source.copy(kind = SourceKind.XTREAM, url = base, username = user, password = pass)
     }
 
     /**
