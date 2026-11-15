@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.0
+
+- Own application id (app.streamflow.tv): StreamFlow installs next to, not over, upstream OpenTV
+
 ## 0.13.2
 
 - Signed with StreamFlow's permanent key, so every later version installs as an update

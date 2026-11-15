@@ -11,11 +11,12 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "app.opentv"
+        // StreamFlow's own identity — distinct from upstream OpenTV, so it is not mistaken for a re-signed copy.
+        applicationId = "app.streamflow.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 29
-        versionName = "0.13.2"
+        versionCode = 30
+        versionName = "0.14.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
