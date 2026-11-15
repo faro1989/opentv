@@ -365,8 +365,6 @@ private fun NavRail(
     onOpenVpn: () -> Unit = {},
     onOpenPhoneRemote: () -> Unit = {},
 ) {
-    // VPN state for the shield in the rail: cyan while the tunnel is up.
-    val vpnStatus by app.opentv.vpn.VpnController.get(androidx.compose.ui.platform.LocalContext.current).status.collectAsState()
     // Expand whenever focus is anywhere inside the rail; collapse back to icons when it leaves.
     var expanded by remember { mutableStateOf(false) }
     val width by animateDpAsState(
@@ -381,7 +379,7 @@ private fun NavRail(
             .background(MaterialTheme.colorScheme.surface)
             .focusGroup()
             .onFocusChanged { expanded = it.hasFocus }
-            .padding(vertical = 16.dp),
+            .padding(vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         // Brand: the logo mark alone when collapsed, the mark + "OpenTV" wordmark when open. The
@@ -416,15 +414,9 @@ private fun NavRail(
         Spacer(Modifier.height(1.dp).fillMaxWidth())
         Spacer(Modifier.weight(1f))
 
+        // VPN and the phone remote live in Settings: with them here too the rail no longer fit a
+        // 1080p TV and pushed Settings off the bottom of the screen.
         RailItem(Icons.Filled.Search, stringResource(R.string.nav_search), expanded, false, onOpenSearch)
-        RailItem(
-            Icons.Filled.VpnKey,
-            stringResource(if (vpnStatus == app.opentv.vpn.VpnController.Status.CONNECTED) R.string.vpn_rail_on else R.string.vpn_title),
-            expanded,
-            vpnStatus == app.opentv.vpn.VpnController.Status.CONNECTED,
-            onOpenVpn,
-        )
-        RailItem(Icons.Filled.SettingsRemote, stringResource(R.string.remote_rail), expanded, false, onOpenPhoneRemote)
         RailItem(Icons.Filled.Person, activeProfileName, expanded, false, onOpenProfiles)
         RailItem(Icons.Filled.Settings, stringResource(R.string.nav_settings), expanded, false, onOpenSettings)
     }
@@ -457,7 +449,7 @@ private fun RailItem(
             .background(bg)
             .onFocusChanged { focused = it.isFocused }
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = label, tint = tint)
