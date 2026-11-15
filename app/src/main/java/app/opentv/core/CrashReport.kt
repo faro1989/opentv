@@ -25,7 +25,7 @@ object CrashReport {
             runCatching {
                 val version = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull()
                 file(app).writeText(
-                    "OpenTV $version · Android ${Build.VERSION.RELEASE} · ${Build.MANUFACTURER} ${Build.MODEL}\n" +
+                    "StreamFlow $version · Android ${Build.VERSION.RELEASE} · ${Build.MANUFACTURER} ${Build.MODEL}\n" +
                         "Thread: ${thread.name}\n\n" + error.stackTraceToString().take(6_000),
                 )
             }
@@ -41,7 +41,7 @@ object CrashReport {
         if (text.isBlank()) return
         runCatching {
             AlertDialog.Builder(activity)
-                .setTitle("OpenTV ist abgestürzt / OpenTV crashed")
+                .setTitle("StreamFlow ist abgestürzt / StreamFlow crashed")
                 .setMessage("Bitte ein Foto davon machen und schicken.\nPlease take a photo and report it.\n\n$text")
                 .setPositiveButton(android.R.string.ok, null)
                 .show()
