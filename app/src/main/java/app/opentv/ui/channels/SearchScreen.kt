@@ -5,6 +5,7 @@
  */
 package app.opentv.ui.channels
 
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.Color
@@ -100,6 +101,34 @@ fun SearchScreen(
     val resultsFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
 
+    // Categories ("Rubriken") whose name matches the search, e.g. "iran" → "IRAN | ALL". Picking one
+    // lists every channel in it on the right.
+    val allCategories by viewModel.visibleCategoryGroups.collectAsState()
+    val categoryRows by viewModel.rows.collectAsState()
+    var pickedCategory by remember { mutableStateOf<ChannelsViewModel.CategoryGroup?>(null) }
+    val matchingCategories = remember(query, allCategories) {
+        val q = query.trim()
+        if (q.length < 2) emptyList() else allCategories.filter { it.label.contains(q, ignoreCase = true) }
+    }
+    LaunchedEffect(query) { pickedCategory = null }
+
+    val categoryColumn: @Composable (Modifier) -> Unit = { mod ->
+        if (matchingCategories.isNotEmpty()) {
+            Column(mod) {
+                SectionHeader(stringResource(R.string.search_categories) + "  ·  ${matchingCategories.size}")
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(matchingCategories, key = { "cat-" + it.key }) { group ->
+                        CategoryChip(group.label, selected = pickedCategory?.key == group.key) {
+                            pickedCategory = group
+                            viewModel.selectCategory(group.key)
+                            keyboard?.hide()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Record now / stop, right from a search result.
     val onRecord: (ChannelsViewModel.Row) -> Unit = { row ->
         val active = activeRecordings.firstOrNull { it.channelId == row.primary.id }
@@ -114,10 +143,26 @@ fun SearchScreen(
 
     val results: @Composable (Modifier) -> Unit = { mod ->
         Column(mod) {
+            val picked = pickedCategory
             when {
+                picked != null -> LazyColumn(
+                    Modifier.focusRequester(resultsFocus),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    item { SectionHeader(picked.label + "  ·  ${categoryRows.size}") }
+                    items(categoryRows, key = { "pc${it.key}" }) { row ->
+                        SearchResultRow(
+                            row = row,
+                            recording = activeRecordings.any { it.channelId == row.primary.id },
+                            onClick = { onPlayChannel(row.primary) },
+                            onRecord = { onRecord(row) },
+                        )
+                    }
+                }
                 query.isBlank() -> Hint(stringResource(R.string.search_start_hint))
                 query.trim().length < 2 -> Hint(stringResource(R.string.common_keep_typing))
-                !anyResults -> Hint(stringResource(R.string.search_no_results, query))
+                !anyResults && matchingCategories.isEmpty() -> Hint(stringResource(R.string.search_no_results, query))
+                !anyResults -> Hint(stringResource(R.string.search_pick_category))
                 else -> LazyColumn(
                     Modifier.focusRequester(resultsFocus),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -153,7 +198,12 @@ fun SearchScreen(
     if (!isTv) {
         // Phone / tablet: a normal search field with the system keyboard and its search key.
         val fieldFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-        LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
+        LaunchedEffect(Unit) {
+            // Wait for the screen to settle, then focus the field and raise the keyboard explicitly.
+            kotlinx.coroutines.delay(250)
+            runCatching { fieldFocus.requestFocus() }
+            keyboard?.show()
+        }
         Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 androidx.compose.material3.OutlinedTextField(
@@ -182,7 +232,13 @@ fun SearchScreen(
                 androidx.compose.material3.TextButton(onClick = onBack) { Text(stringResource(R.string.common_done)) }
             }
             Spacer(Modifier.height(12.dp))
-            results(Modifier.weight(1f).fillMaxWidth())
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                if (matchingCategories.isNotEmpty()) {
+                    categoryColumn(Modifier.width(130.dp).fillMaxHeight())
+                    Spacer(Modifier.width(10.dp))
+                }
+                results(Modifier.weight(1f).fillMaxHeight())
+            }
         }
         return
     }
@@ -234,9 +290,32 @@ fun SearchScreen(
 
             Spacer(Modifier.width(28.dp))
 
+            if (matchingCategories.isNotEmpty()) {
+                categoryColumn(Modifier.width(220.dp).fillMaxHeight())
+                Spacer(Modifier.width(16.dp))
+            }
             results(Modifier.weight(1f).fillMaxSize())
         }
     }
+}
+
+@Composable
+private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Text(
+        label,
+        style = MaterialTheme.typography.labelLarge,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        color = if (selected || focused) app.opentv.ui.theme.Obsidian.Canvas else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected || focused) app.opentv.ui.theme.Obsidian.Cyan else MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    )
 }
 
 @Composable

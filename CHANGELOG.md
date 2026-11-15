@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.3
+
+- Search: keyboard opens reliably on phones; matching categories listed on the left, tap one to see all its channels
+
 ## 0.15.2
 
 - Search: phones get a real search field with the keyboard's search key; TV keyboard gets a Search key; record or stop straight from a channel result

@@ -718,4 +718,6 @@
     <string name="search_rec_started">Aufnahme gestartet</string>
     <string name="search_rec_stopped">Aufnahme gestoppt</string>
     <string name="search_field_hint">Sender, Filme oder Serien …</string>
+    <string name="search_categories">Rubriken</string>
+    <string name="search_pick_category">Wähle links eine Rubrik, um ihre Sender zu sehen.</string>
 </resources>

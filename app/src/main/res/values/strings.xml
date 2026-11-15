@@ -785,4 +785,6 @@
     <string name="search_rec_started">Recording started</string>
     <string name="search_rec_stopped">Recording stopped</string>
     <string name="search_field_hint">Channels, movies or series …</string>
+    <string name="search_categories">Categories</string>
+    <string name="search_pick_category">Pick a category on the left to see its channels.</string>
 </resources>
