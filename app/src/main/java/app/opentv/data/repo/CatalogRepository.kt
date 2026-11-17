@@ -32,6 +32,7 @@ import app.opentv.data.remote.XtreamApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
@@ -167,9 +168,15 @@ class CatalogRepository(
 
     fun observeCategories(kind: StreamKind): Flow<List<Category>> = categoryDao.observe(kind)
 
-    fun observeMovies(categoryId: String? = null): Flow<List<Movie>> = movieDao.observe(categoryId)
+    // A grid never shows tens of thousands of posters; loading every movie of a big panel at once
+    // (and again on every sync batch) filled the heap and crashed the app. Search reaches the rest.
+    fun observeMovies(categoryId: String? = null): Flow<List<Movie>> =
+        movieDao.observe(categoryId, if (categoryId == null) VOD_ALL_LIMIT else VOD_CATEGORY_LIMIT)
+            .distinctUntilChanged()
 
-    fun observeSeries(categoryId: String? = null): Flow<List<Series>> = seriesDao.observe(categoryId)
+    fun observeSeries(categoryId: String? = null): Flow<List<Series>> =
+        seriesDao.observe(categoryId, if (categoryId == null) VOD_ALL_LIMIT else VOD_CATEGORY_LIMIT)
+            .distinctUntilChanged()
 
     fun observeEpisodes(sourceId: Long, seriesId: String): Flow<List<Episode>> =
         episodeDao.observeForSeries(sourceId, seriesId)
@@ -974,3 +981,6 @@ class CatalogRepository(
         const val NORMALIZER_VERSION = 2
     }
 }
+
+private const val VOD_ALL_LIMIT = 1_500
+private const val VOD_CATEGORY_LIMIT = 3_000

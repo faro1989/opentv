@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.3
+
+- Fix out-of-memory crash with large movie/series libraries: list queries are capped, image memory cache halved and cleared when Android runs low
+
 ## 0.17.2
 
 - Sign-in after log out: saved account only, no username/password fields

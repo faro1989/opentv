@@ -38,7 +38,7 @@ class OpenTvApp : Application(), ImageLoaderFactory {
         ImageLoader.Builder(this)
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.25)
+                    .maxSizePercent(0.12)
                     .build()
             }
             .diskCache {
@@ -131,5 +131,18 @@ class OpenTvApp : Application(), ImageLoaderFactory {
             // the refresh button. ensureFeeds + auto-enable-by-region + matcher all live here.
             graph.epgRepository.syncAll(System.currentTimeMillis(), force = false)
         }
+    }
+
+    /** Android is short of memory (or the UI went to the background): drop decoded images. */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            runCatching { coil.Coil.imageLoader(this).memoryCache?.clear() }
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        runCatching { coil.Coil.imageLoader(this).memoryCache?.clear() }
     }
 }

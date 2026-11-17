@@ -459,9 +459,10 @@ interface MovieDao {
         SELECT * FROM movies
         WHERE (:categoryId IS NULL OR categoryId = :categoryId)
         ORDER BY addedMillis DESC, name
+        LIMIT :limit
         """
     )
-    fun observe(categoryId: String?): Flow<List<Movie>>
+    fun observe(categoryId: String?, limit: Int): Flow<List<Movie>>
 
     @Query("SELECT * FROM movies WHERE favourite = 1 ORDER BY name")
     fun observeFavourites(): Flow<List<Movie>>
@@ -559,9 +560,10 @@ interface SeriesDao {
         SELECT * FROM series
         WHERE (:categoryId IS NULL OR categoryId = :categoryId)
         ORDER BY addedMillis DESC, name
+        LIMIT :limit
         """
     )
-    fun observe(categoryId: String?): Flow<List<Series>>
+    fun observe(categoryId: String?, limit: Int): Flow<List<Series>>
 
     @Query("SELECT * FROM series WHERE name LIKE '%' || :query || '%' ORDER BY name LIMIT :limit")
     fun search(query: String, limit: Int = 200): Flow<List<Series>>
